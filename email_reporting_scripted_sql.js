@@ -2,8 +2,9 @@
 // This script is an example of how to transform the results of SQL queries in Markdown for email reporting.
 // Both values and tables can both be transformed to Markdown for email reporting.
 
+// Step 1: Open a new Javascript script in Platform, and copy each section of the code below. 
 
-// Step 1: Update the query you wish to deliver in an email report (value, table, or both)
+// Step 2: Update the query you wish to deliver in an email report (value, table, or both)
 
 //// Value example (swap out query for your own):
 var number = queryToVariable("SELECT max(amount) FROM reporting.donations");
@@ -13,7 +14,7 @@ var table = query("SELECT * FROM reporting.donations;")
 var mdTable = toMarkdownTable(table)
 
 
-// Step 2: Add the markdown to the body of your email notifications.
+// Step 3: Add the markdown to the body of your email notifications.
 
 //// If you wish to add a value in-line, simply add it in-line in the email body:
 //// Our largest donation this week was {{number}}.
@@ -25,7 +26,7 @@ var mdTable = toMarkdownTable(table)
 ////
 
 
-// Step 3: Run the job/schedule the job/receive your email reports.
+// Step 4: Run the job/schedule the job/receive your email reports.
 
 
 
