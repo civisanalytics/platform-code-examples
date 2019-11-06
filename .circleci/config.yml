@@ -1,0 +1,26 @@
+version: 2
+jobs:
+  js_lint:
+    docker:
+      - image: circleci/node:9.9.0
+    steps:
+      - checkout
+      - run: |
+         npm install
+         npm run lint
+  python_lint:
+    docker:
+      - image: circleci/python:3.7.2
+    steps:
+      - checkout
+      - run: |
+         pip install flake8>=3.7,<3.8
+         echo "installed"
+         flake8 */**.py
+
+workflows:
+  version: 2
+  all_tests:
+    jobs:
+      - js_lint
+      - python_lint

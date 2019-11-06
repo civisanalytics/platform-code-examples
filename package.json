@@ -1,0 +1,22 @@
+{
+  "name": "platform-code-examples",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "lint": "eslint examples/*.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/civisanalytics/platform-code-examples.git"
+  },
+  "author": "",
+  "bugs": {
+    "url": "https://github.com/civisanalytics/platform-code-examples/issues"
+  },
+  "homepage": "https://github.com/civisanalytics/platform-code-examples#readme",
+  "devDependencies": {
+    "eslint": "^6.6.0",
+    "eslint-config-airbnb-base": "^14.0.0",
+    "eslint-plugin-import": "^2.18.2"
+  }
+}
