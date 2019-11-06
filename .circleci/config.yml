@@ -14,9 +14,8 @@ jobs:
     steps:
       - checkout
       - run: |
-         pip install flake8>=3.7,<3.8
-         echo "installed"
-         flake8 */**.py
+         pip3 install "flake8>=3.7,<3.8" --user
+         /home/circleci/.local/bin/flake8 **/*.py
 
 workflows:
   version: 2
