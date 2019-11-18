@@ -1,0 +1,44 @@
+# This workflow will split a table of people
+# records by the state field specified
+# and send the records to those state's VAN MyCampaign accounts.
+
+version: '2.0'
+workflow:
+  input:
+    # remote_host -  find under https://platform.civisanalytics.com/spa/remote_hosts
+    - cluster:
+    # database credential id - find under https://platform.civisanalytics.com/spa/credentials
+    - cluster_credential:
+    # name of the input table containing people records
+    - input_table:
+    # (optional) name of response table to store VAN API responses, the state code will be appended to the name
+    - response_table:
+    # 'drop' or 'append' existing response table rows
+    - response_table_setting: drop
+    # the name of the field by which to split people records into states
+    - state_field:
+    # list of VAN API credential ID's - find under https://platform.civisanalytics.com/spa/credentials
+    - state_credentials:
+      - state: IA
+        credential: 12345
+      - state: NH
+        credential: 54321
+  tasks:
+    send_people_to_state_van:
+      action: civis.scripts.custom
+      with-items: credential in <% $.state_credentials %>
+      concurrency: 5
+      input:
+        name: Export People to VAN - <% $.credential.get("state") %>
+        from_template_id: 19204
+        arguments:
+          CLUSTER:
+            database: <% $.cluster %>
+            credential: <% $.cluster_credential %>
+          EXPORT_TYPE: people
+          SQL_QUERY: SELECT * FROM <% $.input_table %> WHERE <% $.state_field %> = '<% $.credential.get("state") %>'
+          RESPONSE_TABLE: <% $.response_table %>__<% $.credential.get("state") %>
+          EXISTING_TABLE_ROWS: <% $.response_table_setting %>
+          NGPVAN_MODE: '1'
+          NGPVAN: <% $.credential.get('credential') %>
+          MODE: run
