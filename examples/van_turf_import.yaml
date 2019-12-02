@@ -1,0 +1,60 @@
+version: '2.0'
+workflow:
+  input:
+    # ngpvan credential id - find under https://platform.civisanalytics.com/spa/credentials
+    - ngpvan_credential:
+    # ngpvan database mode; 0 for MyVoterfile, 1 for MyCampaign
+    - ngpvan_mode: 1
+    # remote_host -  find under https://platform.civisanalytics.com/spa/remote_hosts
+    - cluster:
+    # database credential id - find under https://platform.civisanalytics.com/spa/credentials
+    - cluster_credential:
+    # output table to store turf metadata
+    - metadata_table:
+    # output table to store turf van IDs
+    - turf_table:
+    # option for existing table rows, either 'append' or 'drop'
+    - table_setting: drop
+    - folder_id:
+
+  tasks:
+    # Import list metadata #
+    get_folder_metadata:
+      action: civis.scripts.custom
+      input:
+        name: Import Folder Metadata
+        from_template_id: 36552
+        hidden: true
+        arguments:
+          CLUSTER:
+            database: <% int($.cluster) %>
+            credential: <% int($.cluster_credential) %>
+          MODE: list_metadata_import
+          OUTPUT_TABLE: <% $.metadata_table %>
+          OUTPUT_TABLE_SETTING: <% $.table_setting %>
+          NGPVAN_MODE: <% $.ngpvan_mode %>
+          NGPVAN: <% $.ngpvan_credential %>
+          FOLDER_ID: <% $.folder_id %>
+      on-success:
+        - import_saved_lists
+    
+    # Import saved lists #
+    import_saved_lists:
+      action: civis.scripts.custom
+      concurrency: 20
+      with-items: result in <% task(get_folder_metadata).result.outputs.where($.name = 'list_data').single().value %>
+      input:
+        name: Import Saved Lists
+        from_template_id: 36552
+        hidden: true
+        arguments:
+          CLUSTER:
+            database: <% int($.cluster) %>
+            credential: <% int($.cluster_credential) %>
+          MODE: list_import
+          # store list items in separate tables
+          OUTPUT_TABLE: <% $.turf_table %>_<% $.result['savedListId'] %>
+          OUTPUT_TABLE_SETTING: <% $.table_setting %>
+          NGPVAN_MODE: <% $.ngpvan_mode %>
+          NGPVAN: <% $.ngpvan_credential %>
+          LIST_ID: <% $.result['savedListId'] %>
