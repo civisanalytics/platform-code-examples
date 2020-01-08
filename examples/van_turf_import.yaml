@@ -3,8 +3,8 @@ workflow:
   input:
     # ngpvan credential id - find under https://platform.civisanalytics.com/spa/credentials
     - ngpvan_credential:
-    # ngpvan database mode; 0 for MyVoterfile, 1 for MyCampaign
-    - ngpvan_mode: 1
+    # ngpvan database mode; "0" for MyVoterfile, "1" for MyCampaign
+    - ngpvan_mode: "1"
     # remote_host -  find under https://platform.civisanalytics.com/spa/remote_hosts
     - cluster:
     # database credential id - find under https://platform.civisanalytics.com/spa/credentials
