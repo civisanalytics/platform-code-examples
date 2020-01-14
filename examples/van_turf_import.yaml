@@ -16,7 +16,7 @@ workflow:
     # output table to store turf van IDs
     - turf_table:
     # option for existing table rows, either 'append' or 'drop'
-    - table_setting: drop
+    - table_setting: append
     - folder_id:
 
   tasks:
