@@ -1,3 +1,5 @@
+# This workflow can be used to import folders from VAN. It will work with folders having 
+# <250 lists/turfs.
 version: '2.0'
 workflow:
   input:
@@ -14,7 +16,7 @@ workflow:
     # output table to store turf van IDs
     - turf_table:
     # option for existing table rows, either 'append' or 'drop'
-    - table_setting: drop
+    - table_setting: append
     - folder_id:
 
   tasks:
@@ -52,8 +54,7 @@ workflow:
             database: <% int($.cluster) %>
             credential: <% int($.cluster_credential) %>
           MODE: list_import
-          # store list items in separate tables
-          OUTPUT_TABLE: <% $.turf_table %>_<% $.result['savedListId'] %>
+          OUTPUT_TABLE: <% $.turf_table %>
           OUTPUT_TABLE_SETTING: <% $.table_setting %>
           NGPVAN_MODE: <% $.ngpvan_mode %>
           NGPVAN: <% $.ngpvan_credential %>
