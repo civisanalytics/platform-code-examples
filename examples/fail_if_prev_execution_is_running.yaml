@@ -1,0 +1,13 @@
+fail_if_prev_execution_is_running:
+  action: civis.scripts.python3
+  input:
+    source: |
+      import civis
+      client = civis.APIClient()
+      workflow_id = <% $.get('__env').workflow_id %>
+      executions = client.workflows.list_executions(workflow_id, order='created_at', order_dir='desc', limit=2)
+      if len(executions) > 1:
+          prev_execution = executions[1]
+          print("Previous execution ID: {}, state: {}".format(prev_execution.id, prev_execution.state))
+          if prev_execution.state == 'running':
+              raise RuntimeError('Previous execution is running!')
