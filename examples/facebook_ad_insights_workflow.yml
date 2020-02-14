@@ -1,0 +1,145 @@
+# This is a sample workflow definition to run with a Facebook Ad Insights workflow.
+version: '2.0'
+workflow:
+  input:
+  - {SCRIPT_MODE: run}
+  - {DAYS: 10}
+  - {START_DATE: null}
+  - {END_DATE: null}
+  - {DATABASE_NAME: your_database}
+  - {SCHEMA_NAME: your_schema}
+  - {TABLE_NAME_PREFIX: fb_testtwo}
+  - {IF_EXISTS: drop}
+  - {MAX_ERRORS: 0}
+  - {CUSTOM_BREAKDOWNS: null}
+  - {FB_CREDENTIAL_ID: 'YOUR CREDENTIAL ID'}
+  - {INCLUDE_ALL_ACTIVE: false}
+  tasks:
+    Accounts:
+      action: civis.scripts.custom
+      input:
+        arguments: {CIVIS_EXECUTION_ID: <% $.get('__env').execution_id %>, CIVIS_WORKFLOW_ID: <%
+            $.get('__env').workflow_id %>, CONNECTOR_TABLE: accounts, CUSTOM_BREAKDOWNS: <%
+            $.CUSTOM_BREAKDOWNS %>, DATABASE_NAME: <% $.DATABASE_NAME %>, DAYS: <%
+            $.DAYS %>, END_DATE: <% $.END_DATE %>, FB_CREDENTIAL: <% $.FB_CREDENTIAL_ID
+            %>, IF_EXISTS: <% $.IF_EXISTS %>, INCLUDE_ALL_ACTIVE: <% $.INCLUDE_ALL_ACTIVE
+            %>, MAX_ERRORS: <% $.MAX_ERRORS %>, SCHEMA_NAME: <% $.SCHEMA_NAME %>,
+          SCRIPT_MODE: <% $.SCRIPT_MODE %>, START_DATE: <% $.START_DATE %>, TABLE_NAME_PREFIX: <%
+            $.TABLE_NAME_PREFIX %>}
+        from_template_id: 40500
+        name: 'FB Ads: Accounts Update Workflow'
+      on-complete: [Campaigns]
+    #####
+    # If desired, jobs from the default workflow can be commented out or removed.
+    #####
+    #Ad Insights Custom:
+    #  action: civis.scripts.custom
+    #  input:
+    #    arguments: {CIVIS_EXECUTION_ID: <% $.get('__env').execution_id %>, CIVIS_WORKFLOW_ID: <%
+    #        $.get('__env').workflow_id %>, CONNECTOR_TABLE: ad_insights_custom, CUSTOM_BREAKDOWNS: <%
+    #        $.CUSTOM_BREAKDOWNS %>, DATABASE_NAME: <% $.DATABASE_NAME %>, DAYS: <%
+    #        $.DAYS %>, END_DATE: <% $.END_DATE %>, FB_CREDENTIAL: <% $.FB_CREDENTIAL_ID
+    #        %>, IF_EXISTS: <% $.IF_EXISTS %>, INCLUDE_ALL_ACTIVE: <% $.INCLUDE_ALL_ACTIVE
+    #        %>, MAX_ERRORS: <% $.MAX_ERRORS %>, SCHEMA_NAME: <% $.SCHEMA_NAME %>,
+    #      SCRIPT_MODE: <% $.SCRIPT_MODE %>, START_DATE: <% $.START_DATE %>, TABLE_NAME_PREFIX: <%
+    #        $.TABLE_NAME_PREFIX %>}
+    #    from_template_id: 40500
+    #    name: 'FB Ads: Ad Insights Custom Update Workflow'
+    #Ad Insights Hourly:
+    #  action: civis.scripts.custom
+    #  input:
+    #    arguments: {CIVIS_EXECUTION_ID: <% $.get('__env').execution_id %>, CIVIS_WORKFLOW_ID: <%
+    #        $.get('__env').workflow_id %>, CONNECTOR_TABLE: ad_insights_hourly, CUSTOM_BREAKDOWNS: <%
+    #        $.CUSTOM_BREAKDOWNS %>, DATABASE_NAME: <% $.DATABASE_NAME %>, DAYS: <%
+    #        $.DAYS %>, END_DATE: <% $.END_DATE %>, FB_CREDENTIAL: <% $.FB_CREDENTIAL_ID
+    #        %>, IF_EXISTS: <% $.IF_EXISTS %>, INCLUDE_ALL_ACTIVE: <% $.INCLUDE_ALL_ACTIVE
+    #        %>, MAX_ERRORS: <% $.MAX_ERRORS %>, SCHEMA_NAME: <% $.SCHEMA_NAME %>,
+    #      SCRIPT_MODE: <% $.SCRIPT_MODE %>, START_DATE: <% $.START_DATE %>, TABLE_NAME_PREFIX: <%
+    #        $.TABLE_NAME_PREFIX %>}
+    #    from_template_id: 40500
+    #    name: 'FB Ads: Ad Insights Hourly Update Workflow'
+    Ad_Insights_Daily:
+      action: civis.scripts.custom
+      input:
+        arguments: {CIVIS_EXECUTION_ID: <% $.get('__env').execution_id %>, CIVIS_WORKFLOW_ID: <%
+            $.get('__env').workflow_id %>, CONNECTOR_TABLE: ad_insights_daily, CUSTOM_BREAKDOWNS: <%
+            $.CUSTOM_BREAKDOWNS %>, DATABASE_NAME: <% $.DATABASE_NAME %>, DAYS: <%
+            $.DAYS %>, END_DATE: <% $.END_DATE %>, FB_CREDENTIAL: <% $.FB_CREDENTIAL_ID
+            %>, IF_EXISTS: <% $.IF_EXISTS %>, INCLUDE_ALL_ACTIVE: <% $.INCLUDE_ALL_ACTIVE
+            %>, MAX_ERRORS: <% $.MAX_ERRORS %>, SCHEMA_NAME: <% $.SCHEMA_NAME %>,
+          SCRIPT_MODE: <% $.SCRIPT_MODE %>, START_DATE: <% $.START_DATE %>, TABLE_NAME_PREFIX: <%
+            $.TABLE_NAME_PREFIX %>}
+        from_template_id: 40500
+        name: 'FB Ads: Ad Insights Daily Update Workflow'
+      on-complete: [Ad_Set_Insights_Lifetime]
+    Ads:
+      action: civis.scripts.custom
+      input:
+        arguments: {CIVIS_EXECUTION_ID: <% $.get('__env').execution_id %>, CIVIS_WORKFLOW_ID: <%
+            $.get('__env').workflow_id %>, CONNECTOR_TABLE: ads, CUSTOM_BREAKDOWNS: <%
+            $.CUSTOM_BREAKDOWNS %>, DATABASE_NAME: <% $.DATABASE_NAME %>, DAYS: <%
+            $.DAYS %>, END_DATE: <% $.END_DATE %>, FB_CREDENTIAL: <% $.FB_CREDENTIAL_ID
+            %>, IF_EXISTS: <% $.IF_EXISTS %>, INCLUDE_ALL_ACTIVE: <% $.INCLUDE_ALL_ACTIVE
+            %>, MAX_ERRORS: <% $.MAX_ERRORS %>, SCHEMA_NAME: <% $.SCHEMA_NAME %>,
+          SCRIPT_MODE: <% $.SCRIPT_MODE %>, START_DATE: <% $.START_DATE %>, TABLE_NAME_PREFIX: <%
+            $.TABLE_NAME_PREFIX %>}
+        from_template_id: 40500
+        name: 'FB Ads: Ads Update Workflow'
+    Adsets:
+      action: civis.scripts.custom
+      input:
+        arguments: {CIVIS_EXECUTION_ID: <% $.get('__env').execution_id %>, CIVIS_WORKFLOW_ID: <%
+            $.get('__env').workflow_id %>, CONNECTOR_TABLE: adsets, CUSTOM_BREAKDOWNS: <%
+            $.CUSTOM_BREAKDOWNS %>, DATABASE_NAME: <% $.DATABASE_NAME %>, DAYS: <%
+            $.DAYS %>, END_DATE: <% $.END_DATE %>, FB_CREDENTIAL: <% $.FB_CREDENTIAL_ID
+            %>, IF_EXISTS: <% $.IF_EXISTS %>, INCLUDE_ALL_ACTIVE: <% $.INCLUDE_ALL_ACTIVE
+            %>, MAX_ERRORS: <% $.MAX_ERRORS %>, SCHEMA_NAME: <% $.SCHEMA_NAME %>,
+          SCRIPT_MODE: <% $.SCRIPT_MODE %>, START_DATE: <% $.START_DATE %>, TABLE_NAME_PREFIX: <%
+            $.TABLE_NAME_PREFIX %>}
+        from_template_id: 40500
+        name: 'FB Ads: Adsets Update Workflow'
+    Campaigns:
+      action: civis.scripts.custom
+      input:
+        arguments: {CIVIS_EXECUTION_ID: <% $.get('__env').execution_id %>, CIVIS_WORKFLOW_ID: <%
+            $.get('__env').workflow_id %>, CONNECTOR_TABLE: campaigns, CUSTOM_BREAKDOWNS: <%
+            $.CUSTOM_BREAKDOWNS %>, DATABASE_NAME: <% $.DATABASE_NAME %>, DAYS: <%
+            $.DAYS %>, END_DATE: <% $.END_DATE %>, FB_CREDENTIAL: <% $.FB_CREDENTIAL_ID
+            %>, IF_EXISTS: <% $.IF_EXISTS %>, INCLUDE_ALL_ACTIVE: <% $.INCLUDE_ALL_ACTIVE
+            %>, MAX_ERRORS: <% $.MAX_ERRORS %>, SCHEMA_NAME: <% $.SCHEMA_NAME %>,
+          SCRIPT_MODE: <% $.SCRIPT_MODE %>, START_DATE: <% $.START_DATE %>, TABLE_NAME_PREFIX: <%
+            $.TABLE_NAME_PREFIX %>}
+        from_template_id: 40500
+        name: 'FB Ads: Campaigns Update Workflow'
+      on-complete: [Adsets]
+    #####
+    # Below are customized extensions to the default workflow
+    #####
+    Ad_Set_Insights_Lifetime:
+      action: civis.scripts.custom
+      input:
+        arguments: {CIVIS_EXECUTION_ID: <% $.get('__env').execution_id %>, CIVIS_WORKFLOW_ID: <%
+            $.get('__env').workflow_id %>, CONNECTOR_TABLE: adset_insights_custom, CUSTOM_BREAKDOWNS: null, 
+            DATABASE_NAME: <% $.DATABASE_NAME %>, DAYS: <%
+            $.DAYS %>, END_DATE: <% $.END_DATE %>, FB_CREDENTIAL: <% $.FB_CREDENTIAL_ID
+            %>, IF_EXISTS: <% $.IF_EXISTS %>, INCLUDE_ALL_ACTIVE: <% $.INCLUDE_ALL_ACTIVE
+            %>, MAX_ERRORS: <% $.MAX_ERRORS %>, SCHEMA_NAME: <% $.SCHEMA_NAME %>,
+          SCRIPT_MODE: <% $.SCRIPT_MODE %>, START_DATE: <% $.START_DATE %>, TABLE_NAME_PREFIX: <%
+            $.TABLE_NAME_PREFIX %>, CUSTOM_TABLE_NAME: adset_insights_lifetime,
+            CUSTOM_DATE_PRESET: lifetime, CUSTOM_TIME_INCREMENT: all_days}
+        from_template_id: 40500
+        name: 'FB Ads: Ad Set Insights Lifetime Update Workflow'
+    Campaign_Insights_Weekly:
+      action: civis.scripts.custom
+      input:
+        arguments: {CIVIS_EXECUTION_ID: <% $.get('__env').execution_id %>, CIVIS_WORKFLOW_ID: <%
+            $.get('__env').workflow_id %>, CONNECTOR_TABLE: campaign_insights_custom, CUSTOM_BREAKDOWNS: null, 
+            DATABASE_NAME: <% $.DATABASE_NAME %>, DAYS: <%
+            $.DAYS %>, END_DATE: <% $.END_DATE %>, FB_CREDENTIAL: <% $.FB_CREDENTIAL_ID
+            %>, IF_EXISTS: <% $.IF_EXISTS %>, INCLUDE_ALL_ACTIVE: <% $.INCLUDE_ALL_ACTIVE
+            %>, MAX_ERRORS: <% $.MAX_ERRORS %>, SCHEMA_NAME: <% $.SCHEMA_NAME %>,
+          SCRIPT_MODE: <% $.SCRIPT_MODE %>, START_DATE: <% $.START_DATE %>, TABLE_NAME_PREFIX: <%
+            $.TABLE_NAME_PREFIX %>, CUSTOM_TABLE_NAME: campaign_insights_weekly,
+            CUSTOM_DATE_PRESET: lifetime, CUSTOM_TIME_INCREMENT: 7}
+        from_template_id: 40500
+        name: 'FB Ads: Campaign Insights Weekly Update Workflow'    
