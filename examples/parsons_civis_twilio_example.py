@@ -22,7 +22,7 @@ from parsons.twilio.twilio import Twilio
 # Civis: github.com/move-coop/parsons/blob/master/parsons/civis/civisclient.py
 # Twilio: github.com/move-coop/parsons/blob/master/parsons/twilio/twilio.py
 
-CIVIS_DATABASE = 32
+CIVIS_DATABASE = 99
 CIVIS_TABLE = "twilio_test.account_usage"
 
 civis_client = CivisClient(db=CIVIS_DATABASE)
