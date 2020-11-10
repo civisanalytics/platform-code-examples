@@ -74,6 +74,7 @@ class CivisTwilioConnector:
                 "'Twilio Account' credential must be a custom credential, see Step 4")
 
 if __name__ == "__main__":
+    print(os.environ)
     connector = CivisTwilioConnector()
     connector.twilio_to_civis()
     connector.read_from_civis()
