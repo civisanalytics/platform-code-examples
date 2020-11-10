@@ -47,7 +47,7 @@ import os
 class CivisTwilioConnector:
 
     def __init__(self):
-        self.validate_params()
+        self.validate_environment()
         self.civis_client = CivisClient(db=CIVIS_DATABASE)
         self.twilio_client = Twilio(
             account_sid=os.environ.get('TWILIO_ACCOUNT_USERNAME'),
@@ -65,9 +65,13 @@ class CivisTwilioConnector:
         table = self.civis_client.query(query)
         print(table)
 
-    def validate_params(self):
-        pass
-        # TODO: validate params
+    def validate_environment(self):
+        if not os.environ.get('TWILIO_ACCOUNT_USERNAME'):
+            raise ValueError(
+                "No credential named 'Twilio Account' found, see Step 4")
+        if not os.environ.get('TWILIO_ACCOUNT_PASSWORD'):
+            raise ValueError(
+                "'Twilio Account' credential must be a custom credential, see Step 4")
 
 if __name__ == "__main__":
     connector = CivisTwilioConnector()
