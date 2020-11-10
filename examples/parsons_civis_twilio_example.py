@@ -8,31 +8,28 @@
 #         the first two paragraphs under "Connecting Platform to Github/Bitbucket":
 #         https://civis.zendesk.com/hc/en-us/articles/115003734992-Version-Control
 
-
-# Step 2: Create a new container script in Platform with the following fields:
-#         GITHUB REPOSITORY URL: The github repository from Step 1
-#         GITHUB REPOSITORY REFERENCE: The branch name that contains the copy of this file.
-#         COMMAND: python /app/<path to the copy of this file>
-#         DOCKER IMAGE NAME: movementcooperative/parsons
-#         DOCKER IMAGE TAG: v0.16.0
-#         Docs: https://civis.zendesk.com/hc/en-us/articles/218200643-Container-Scripts
-
-
-# Step 3: Set CIVIS_DATABASE and CIVIS_TABLE global variables below
+# Step 2: Set CIVIS_DATABASE and CIVIS_TABLE global variables below
 #         CIVIS_TABLE should be in "schema.table" form
 #         See list of databases: platform.civisanalytics.com/spa/remote_hosts
 
 CIVIS_DATABASE = 32
 CIVIS_TABLE = "twilio_test.account_usage"
 
-# Step 4: Create a platform custom credential with the following fields:
+# Step 3: Create a platform custom credential with the following fields:
 #         Name: Twilio Account
 #         Credential Type: Custom
 #         Username: Twilio Account SID
 #         Password: Twilio Auth Token
 #
-#         To create platform credentials: platform.civisanalytics.com/spa/credentials/new
+#         Docs on creating platform credentials: platform.civisanalytics.com/spa/credentials/new
 #         Note: both twilio variables can be found at www.twilio.com/console
+
+# Step 4: Clone this Platform container script: platform.civisanalytics.com/spa/#/scripts/containers/100928912
+#         Update the following fields in the container script:
+#         GITHUB REPOSITORY URL: The github repository from Step 1
+#         GITHUB REPOSITORY REFERENCE: The branch name that contains the copy of this file.
+#         TWILIO ACCOUNT CREDENTIAL: credential from Step 3
+#         Container Scripts docs: https://civis.zendesk.com/hc/en-us/articles/218200643-Container-Scripts
 
 # Step 5: Run the container script!
 
@@ -74,7 +71,6 @@ class CivisTwilioConnector:
                 "'Twilio Account' credential must be a custom credential, see Step 4")
 
 if __name__ == "__main__":
-    print(os.environ)
     connector = CivisTwilioConnector()
     connector.twilio_to_civis()
     connector.read_from_civis()
