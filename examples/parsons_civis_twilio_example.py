@@ -24,13 +24,15 @@ CIVIS_TABLE = "twilio_test.account_usage"
 #         Docs on creating platform credentials: platform.civisanalytics.com/spa/credentials/new
 #         Note: both twilio variables can be found at www.twilio.com/console
 
-# Step 4: Clone this Platform container script: platform.civisanalytics.com/spa/#/scripts/containers/100928912
+# Step 4: Clone this Platform container script:
+#         platform.civisanalytics.com/spa/#/scripts/containers/100928912
 #         Note: you may need to contact support to get shared on that script.
 #         Update the following fields in the container script:
 #         GITHUB REPOSITORY URL: The github repository from Step 1
 #         GITHUB REPOSITORY REFERENCE: The branch name that contains the copy of this file.
 #         TWILIO ACCOUNT CREDENTIAL: credential from Step 3
-#         Container Scripts docs: https://civis.zendesk.com/hc/en-us/articles/218200643-Container-Scripts
+#         Container Scripts docs:
+#         https://civis.zendesk.com/hc/en-us/articles/218200643-Container-Scripts
 
 # Step 5: Run the container script!
 
@@ -42,6 +44,7 @@ from parsons.civis.civisclient import CivisClient
 from parsons.twilio.twilio import Twilio
 import os
 
+
 class CivisTwilioConnector:
 
     def __init__(self):
@@ -49,14 +52,11 @@ class CivisTwilioConnector:
         self.civis_client = CivisClient(db=CIVIS_DATABASE)
         self.twilio_client = Twilio(
             account_sid=os.environ.get('TWILIO_ACCOUNT_USERNAME'),
-            auth_token=os.environ.get('TWILIO_ACCOUNT_PASSWORD')
-            )
-
+            auth_token=os.environ.get('TWILIO_ACCOUNT_PASSWORD'))
 
     def twilio_to_civis(self):
         table = self.twilio_client.get_account_usage()
         self.civis_client.table_import(table, CIVIS_TABLE, existing_table_rows='drop')
-
 
     def read_from_civis(self):
         query = f"SELECT * from {CIVIS_TABLE}"
@@ -70,6 +70,7 @@ class CivisTwilioConnector:
         if not os.environ.get('TWILIO_ACCOUNT_PASSWORD'):
             raise ValueError(
                 "'Twilio Account' credential must be a custom credential, see Step 4")
+
 
 if __name__ == "__main__":
     connector = CivisTwilioConnector()
