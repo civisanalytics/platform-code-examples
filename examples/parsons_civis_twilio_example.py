@@ -9,10 +9,10 @@
 #         https://civis.zendesk.com/hc/en-us/articles/115003734992-Version-Control
 
 # Step 2: Set CIVIS_DATABASE and CIVIS_TABLE global variables below
+#         List of databases: platform.civisanalytics.com/spa/remote_hosts
 #         CIVIS_TABLE should be in "schema.table" form
-#         See list of databases: platform.civisanalytics.com/spa/remote_hosts
 
-CIVIS_DATABASE = 32
+CIVIS_DATABASE = 99
 CIVIS_TABLE = "twilio_test.account_usage"
 
 # Step 3: Create a platform custom credential with the following fields:
@@ -25,6 +25,7 @@ CIVIS_TABLE = "twilio_test.account_usage"
 #         Note: both twilio variables can be found at www.twilio.com/console
 
 # Step 4: Clone this Platform container script: platform.civisanalytics.com/spa/#/scripts/containers/100928912
+#         Note: you may need to contact support to get shared on that script.
 #         Update the following fields in the container script:
 #         GITHUB REPOSITORY URL: The github repository from Step 1
 #         GITHUB REPOSITORY REFERENCE: The branch name that contains the copy of this file.
