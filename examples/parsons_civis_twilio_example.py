@@ -1,6 +1,7 @@
 # This script is an example of using the Parsons library to import data from
 # Twilio using the Parsons Twilio connector, and then upload the resulting
 # table to Platform using the Parsons Civis connector.
+# Parsons library source: https://github.com/move-coop/parsons
 # Below are instructions to be able to customize and run this file in Platform.
 
 # Step 1: Copy this file to a Github repository that is connected to Platform.
