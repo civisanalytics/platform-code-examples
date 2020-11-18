@@ -1,9 +1,9 @@
-# This script is an example of using the parsons library to import data from
-# Twilio using the parsons Twilio connector, and then upload the resulting
-# table to Platform using the parsons Civis connector.
+# This script is an example of using the Parsons library to import data from
+# Twilio using the Parsons Twilio connector, and then upload the resulting
+# table to Platform using the Parsons Civis connector.
 # Below are instructions to be able to customize and run this file in Platform.
 
-# Step 1: Copy this file to a github repository that is connected to Platform.
+# Step 1: Copy this file to a Github repository that is connected to Platform.
 #         For docs on how to connect Platform to Github, follow the steps in
 #         the first two paragraphs under "Connecting Platform to Github/Bitbucket":
 #         https://civis.zendesk.com/hc/en-us/articles/115003734992-Version-Control
@@ -18,25 +18,35 @@ CIVIS_TABLE = "twilio_test.account_usage"
 # Step 3: Create a platform custom credential with the following fields:
 #         Name: Twilio Account
 #         Credential Type: Custom
-#         Username: Twilio Account SID
-#         Password: Twilio Auth Token
+#         Username: <Twilio Account SID>
+#         Password: <Twilio Auth Token>
 #
 #         Docs on creating platform credentials: platform.civisanalytics.com/spa/credentials/new
-#         Note: both twilio variables can be found at www.twilio.com/console
+#         Twilio Account SID & Auth Token can be found at www.twilio.com/console
 
-# Step 4: Clone this Platform container script:
-#         platform.civisanalytics.com/spa/#/scripts/containers/100928912
-#         Note: you may need to contact support to get shared on that script.
-#         Update the following fields in the container script:
-#         GITHUB REPOSITORY URL: The github repository from Step 1
-#         GITHUB REPOSITORY REFERENCE: The branch name that contains the copy of this file.
-#         TWILIO ACCOUNT CREDENTIAL: credential from Step 3
+# Step 4: Create a Platform container script (Code -> Container) with the following fields:
+#         GITHUB REPOSITORY URL: <Github repository from Step 1>
+#         GITHUB REPOSITORY REFERENCE: <Github Branch that contains the copy of this file>
+#         COMMAND: pip install pandas
+#                  python /app/examples/parsons_civis_twilio_example.py
+#         DOCKER IMAGE NAME: movementcooperative/parsons
+#         DOCKER IMAGE TAG: v0.16.0
+#
 #         Container Scripts docs:
 #         https://civis.zendesk.com/hc/en-us/articles/218200643-Container-Scripts
 
-# Step 5: Run the container script!
+# Step 5: Add a parameter to the container (Set Parameters) with the following fields:
+#         TYPE: Custom Credential
+#         REQUIRED: Yes
+#         PARAMETER NAME: TWILIO_ACCOUNT
+#         INPUT DISPLAY NAME (OPTIONAL): TWILIO ACCOUNT CREDENTIAL
 
-# For complete documentation on parsons twilio & civis connectors, see:
+# Step 6: Set the TWILIO ACCOUNT CREDENTIAL parameter from Step 5 to be the
+#         credential created in Step 3
+
+# Step 7: Run the container script!
+
+# For complete documentation on Parsons Twilio & Civis connectors, see:
 # Civis: github.com/move-coop/parsons/blob/master/parsons/civis/civisclient.py
 # Twilio: github.com/move-coop/parsons/blob/master/parsons/twilio/twilio.py
 
