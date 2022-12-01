@@ -112,6 +112,6 @@ for workflow in workflows:
     failed_to_update.append(f" (Workflow ID {workflow.id}) - Unexpected error {err}")
 
 # Print Failed Jobs
-print(f"Failed to turn off notifications for {len(failed_to_update) jobs}")
+print(f"Failed to turn off notifications for {len(failed_to_update)} jobs")
 for failed_job in failed_to_update:
   sys.stderr.write(failed_job + '\n')
