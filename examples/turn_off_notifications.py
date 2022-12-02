@@ -2,19 +2,62 @@ import civis
 import os
 import sys
 
-def bulk_fetch(api_method, user_id):
+failed_to_update = []
+
+def paginated_processing(api_method, user_id, process_method):
   page_num = 1
-  jobs = []
-  # LM: Collecting all the user's jobs up front won't be the most memory efficient, not sure if that's a large enough concern to refactor this or not.
-  # Maybe we should check how many jobs some of our power users have? What was the memory usage of this script when you were running it?
+
   while True:
     results = api_method(author=user_id, page_num=page_num)
     if len(results) == 0:
         break
-    jobs += results
+    process_method(results)
     page_num+=1
 
-  return jobs
+def process_jobs(jobs):
+  jobs_to_skip = ['JobTypes::Query', 'JobTypes::SingleTableScanner', 'JobTypes::Snapshot', 'JobTypes::Import']
+  for job in jobs:
+    if job.type in jobs_to_skip:
+      continue
+    try:
+      if job.from_template_id is not None:
+        client.scripts.patch_custom(job.id, notifications=notifications)
+      elif job.type == 'JobTypes::ContainerDocker':
+        client.scripts.patch_containers(job.id, notifications=notifications)
+
+      elif job.type == 'JobTypes::PythonDocker':
+        client.scripts.patch_python3(job.id, notifications=notifications)
+
+      elif job.type == 'JobTypes::RDocker':
+        client.scripts.patch_r(job.id, notifications=notifications)
+
+      elif job.type == 'JobTypes::SqlRunner':
+        client.scripts.patch_sql(job.id, notifications=notifications)
+
+      elif job.type == 'JobTypes::ScriptedSql':
+        client.scripts.patch_javascript(job.id, notifications=notifications)
+
+      else:
+        raise Exception(f"Unknown job type")
+
+    except Exception as err:
+        failed_to_update.append(f" ({job.type} ID {job.id}) - Unexpected error {err}")
+
+def process_imports(imports):
+  for import_job in imports:
+    try:
+      client.imports.put(import_job.id, import_job.name, import_job.sync_type, import_job.is_outbound, notifications=notifications)
+    except Exception as err:
+      failed_to_update.append(f" (Import ID {import_job.id}) - Unexpected error {err}")
+
+
+def process_workflows(workflows):
+  for workflow in workflows:
+      try:
+        client.workflows.patch(workflow.id, notifications=notifications)
+      except Exception as err:
+        failed_to_update.append(f" (Workflow ID {workflow.id}) - Unexpected error {err}")
+
 
 client = civis.APIClient()
 user = client.users.list_me()
@@ -40,60 +83,19 @@ else:
     turning_off_notifs_str = "failure"
     notifications.update({'failure_on': not success_off})
 
+
 print(f'Turning off {turning_off_notifs_str} notifications for scripts owned by user id {user_id}')
-jobs = bulk_fetch(client.jobs.list, user_id)
-
-failed_to_update = []
-jobs_to_skip = ['JobTypes::Query', 'JobTypes::SingleTableScanner', 'JobTypes::Snapshot', 'JobTypes::Import']
-for job in jobs:
-  if job.type in jobs_to_skip:
-    continue
-  try:
-    if job.from_template_id is not None:
-      client.scripts.patch_custom(job.id, notifications=notifications)
-
-    # I think this should also be an elif?
-    if job.type == 'JobTypes::ContainerDocker':
-      client.scripts.patch_containers(job.id, notifications=notifications)
-
-    elif job.type == 'JobTypes::PythonDocker':
-      client.scripts.patch_python3(job.id, notifications=notifications)
-
-    elif job.type == 'JobTypes::RDocker':
-      client.scripts.patch_r(job.id, notifications=notifications)
-
-    elif job.type == 'JobTypes::SqlRunner':
-      client.scripts.patch_sql(job.id, notifications=notifications)
-
-    elif job.type == 'JobTypes::ScriptedSql':
-      client.scripts.patch_javascript(job.id, notifications=notifications)
-
-    else:
-      raise Exception(f"Unknown job type")
-
-  except Exception as err:
-      failed_to_update.append(f" ({job.type} ID {job.id}) - Unexpected error {err}")
-
+paginated_processing(client.jobs.list, user_id, process_jobs)
 
 # IMPORTS
 print(f'Turning off {turning_off_notifs_str} notifications for imports owned by user id {user_id}')
-imports = bulk_fetch(client.imports.list, user_id)
-for import_job in imports:
-  try:
-    client.imports.put(import_job.id, import_job.name, import_job.sync_type, import_job.is_outbound, notifications=notifications)
-  except Exception as err:
-    failed_to_update.append(f" (Import ID {import_job.id}) - Unexpected error {err}")
+paginated_processing(client.imports.list, user_id, process_imports)
 
+  # WORKFLOWS
 
 if handle_workflows == True:
-  # WORKFLOWS
   print(f'Turning off {turning_off_notifs_str} notifications for workflows owned by user id {user_id}')
-  workflows = bulk_fetch(client.workflows.list, user_id)
-  for workflow in workflows:
-    try:
-      client.workflows.patch(workflow.id, notifications=notifications)
-    except Exception as err:
-      failed_to_update.append(f" (Workflow ID {workflow.id}) - Unexpected error {err}")
+  # paginated_processing(client.workflows.list, user_id, process_workflows)
 
 
 # Print Failed Jobs
