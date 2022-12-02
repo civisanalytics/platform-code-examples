@@ -95,7 +95,7 @@ paginated_processing(client.imports.list, user_id, process_imports)
 
 if handle_workflows == True:
   print(f'Turning off {turning_off_notifs_str} notifications for workflows owned by user id {user_id}')
-  # paginated_processing(client.workflows.list, user_id, process_workflows)
+  paginated_processing(client.workflows.list, user_id, process_workflows)
 
 
 # Print Failed Jobs
