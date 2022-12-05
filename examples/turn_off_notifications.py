@@ -1,3 +1,7 @@
+# Python script that handles turning off notifications for all jobs, imports, and workflows (optionally) owned by the running user
+# This script will request a page of 50 objects at a time and turn off their notifications sequentially.
+# Any erros that occurred during the run of the script will be collected and printed out towards the end
+
 import civis
 import os
 import sys
