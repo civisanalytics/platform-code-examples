@@ -1,4 +1,4 @@
-name: 'civis-jaffle-shop-example'
+name: 'civis_jaffle_shop-example'
 
 config-version: 2
 version: '0.1'
@@ -24,7 +24,7 @@ seeds:
     node_color: '#cd7f32'
 
 models:
-  civis-jaffle-shop-example:
+  civis_jaffle_shop-example:
     materialized: table
     customers:
       +alias: "customers"
