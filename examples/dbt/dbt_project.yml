@@ -1,0 +1,44 @@
+name: 'civis-jaffle-shop-example'
+
+config-version: 2
+version: '0.1'
+
+profile: 'dbt-civis'
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+analysis-paths: ["analysis"]
+macro-paths: ["macros"]
+
+target-path: "target"
+clean-targets:
+    - "target"
+    - "dbt_modules"
+    - "logs"
+
+require-dbt-version: [">=1.0.0", "<2.0.0"]
+
+seeds:
+  +docs:
+    node_color: '#cd7f32'
+
+models:
+  jaffle_shop:
+    materialized: table
+    customers:
+      +alias: "customers"
+    orders:
+      +alias: "orders"
+    staging:
+      materialized: view
+      stg_customers:
+        +alias: "{{ env_var('PREFIX') }}stg_customers"
+      stg_orders:
+        +alias: "{{ env_var('PREFIX') }}stg_orders"
+      stg_payments:
+        +alias: "{{ env_var('PREFIX') }}stg_payments"
+      +docs:
+        node_color: "silver"
+    +docs:
+      node_color: "gold"
