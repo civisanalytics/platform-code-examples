@@ -33,11 +33,11 @@ models:
     staging:
       materialized: view
       stg_customers:
-        +alias: "{{ env_var('PREFIX') }}stg_customers"
+        +alias: "{{ env_var('PREFIX', 'dbt') }}stg_customers"
       stg_orders:
-        +alias: "{{ env_var('PREFIX') }}stg_orders"
+        +alias: "{{ env_var('PREFIX', 'dbt') }}stg_orders"
       stg_payments:
-        +alias: "{{ env_var('PREFIX') }}stg_payments"
+        +alias: "{{ env_var('PREFIX', 'dbt') }}stg_payments"
       +docs:
         node_color: "silver"
     +docs:
