@@ -2,7 +2,7 @@ version: 2.1
 jobs:
   js_lint:
     docker:
-      - image: cimg/node:9.9.0
+      - image: cimg/node:14.21
     steps:
       - checkout
       - run: |
@@ -10,7 +10,7 @@ jobs:
          npm run lint
   python_lint:
     docker:
-      - image: cimg/python:3.7.2
+      - image: cimg/python:3.7
     steps:
       - checkout
       - run: |
