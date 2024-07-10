@@ -24,7 +24,7 @@ seeds:
     node_color: '#cd7f32'
 
 models:
-  jaffle_shop:
+  civis-jaffle-shop-example:
     materialized: table
     customers:
       +alias: "customers"
