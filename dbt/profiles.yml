@@ -1,0 +1,13 @@
+dbt-civis:
+  target: "{{ env_var('DBT_TARGET') }}"
+  default: redshift_adapter
+  outputs:
+    redshift_adapter:
+      type: redshift
+      host: "{{ env_var('DATABASE_HOST') }}"
+      port: "{{ env_var('DATABASE_PORT') | as_number }}"
+      user: "{{ env_var('DATABASE_USERNAME') }}"
+      pass: "{{ env_var('DATABASE_PASSWORD') }}"
+      dbname: "{{ env_var('DATABASE_NAME') }}"
+      schema: "{{ env_var('DATABASE_SCHEMA', 'default_schema_name') }}"
+      threads: 4
