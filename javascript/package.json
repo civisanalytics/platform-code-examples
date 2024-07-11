@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
-    "lint": "eslint examples/*.js"
+    "lint": "eslint javascript/*/*.js"
   },
   "repository": {
     "type": "git",

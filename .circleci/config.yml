@@ -6,6 +6,7 @@ jobs:
     steps:
       - checkout
       - run: |
+         cd javascript
          npm install
          npm run lint
   python_lint:
@@ -14,8 +15,9 @@ jobs:
     steps:
       - checkout
       - run: |
-         pip install "flake8>=3.7,<3.8" --user
-         /home/circleci/.local/bin/flake8 **/*.py
+          cd python
+          pip install --disable-pip-version-check --user -r requirements.txt
+          /home/circleci/.local/bin/flake8 **/*.py
 
 workflows:
   version: 2
