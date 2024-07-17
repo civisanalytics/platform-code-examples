@@ -3,7 +3,7 @@ dbt-civis:
   default: redshift_adapter
   outputs:
     redshift_adapter:
-      type: redshift
+      type: "{{ env_var('DATABASE_TYPE', 'redshift') }}"
       host: "{{ env_var('DATABASE_HOST') }}"
       port: "{{ env_var('DATABASE_PORT') | as_number }}"
       user: "{{ env_var('DATABASE_USERNAME') }}"
@@ -11,3 +11,23 @@ dbt-civis:
       dbname: "{{ env_var('DATABASE_NAME') }}"
       schema: "{{ env_var('DATABASE_SCHEMA', 'default_schema_name') }}"
       threads: 4
+    bigquery_oauth_adapter:
+      threads: 4
+      method: "{{ env_var('GCP_AUTH_METHOD') }}"
+      type: "{{ env_var('DATABASE_TYPE') }}"
+      pass: "{{ env_var('DATABASE_PASSWORD') }}"
+      dbname: "{{ env_var('DATABASE_NAME') }}"
+      schema: "{{ env_var('DATABASE_SCHEMA', 'default_schema_name') }}"
+      project: "{{ env_var('GCP_PROJECT_ID') }}"
+      dataset: "{{ env_var('DBT_DATASET_NAME') }}" # You can also use "schema" here
+      refresh_token: "{{ env_var('GCP_PROJECT_ID') }}"
+      client_id: "{{ env_var('GCP_CLIENT_ID') }}"
+      client_secret: "{{ env_var('GCP_CLIENT_SECRET') }}"
+      token_uri: "{{ env_var('REDIRECT_URI') }}"
+    bigquery_service_account_adapter:
+      threads: 4
+      method: "{{ env_var('GCP_AUTH_METHOD') }}"
+      type: "{{ env_var('DATABASE_TYPE') }}"
+      project: "{{ env_var('GCP_PROJECT_ID') }}"
+      dataset: "{{ env_var('DBT_DATASET_NAME') }}"
+      keyfile: "{{ env_var('GCP_KEYFILE') }}"
