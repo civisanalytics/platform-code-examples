@@ -19,10 +19,10 @@ dbt-civis:
       dbname: "{{ env_var('DATABASE_NAME') }}"
       project: "{{ env_var('GCP_PROJECT_ID') }}"
       schema: "{{ env_var('DATABASE_SCHEMA', 'default_schema') }}"
-      refresh_token: "{{ env_var('REFRESH_TOKEN') }}"
+      refresh_token: "{{ env_var('GCP_REFRESH_TOKEN') }}"
       client_id: "{{ env_var('GCP_CLIENT_ID') }}"
       client_secret: "{{ env_var('GCP_CLIENT_SECRET') }}"
-      token_uri: "{{ env_var('REDIRECT_URI') }}"
+      token_uri: "{{ env_var('GCP_REDIRECT_URI') }}"
     bigquery_service_account_adapter:
       threads: 4
       method: "{{ env_var('GCP_AUTH_METHOD') }}"
