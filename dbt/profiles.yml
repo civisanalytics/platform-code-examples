@@ -11,6 +11,7 @@ dbt-civis:
       dbname: "{{ env_var('DATABASE_NAME') }}"
       schema: "{{ env_var('DATABASE_SCHEMA') }}"
       threads: 4
+
     bigquery_oauth_adapter:
       threads: 4
       type: "{{ env_var('DATABASE_TYPE') }}"
@@ -22,7 +23,7 @@ dbt-civis:
       project: "{{ env_var('GCP_PROJECT_ID') }}"
       refresh_token: "{{ env_var('GCP_REFRESH_TOKEN') }}"
 
-      token_uri: "https://platform-staging.civisanalytics.com"
+      token_uri: "{{ env_var('GCP_REDIRECT_URI') }}"
       client_id: "{{ env_var('GCP_CLIENT_ID') }}"
       client_secret: "{{ env_var('GCP_CLIENT_SECRET') }}"
 
