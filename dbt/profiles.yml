@@ -22,7 +22,7 @@ dbt-civis:
       project: "{{ env_var('GCP_PROJECT_ID') }}"
       refresh_token: "{{ env_var('GCP_REFRESH_TOKEN') }}"
 
-      token_uri: "{{ env_var('GCP_TOKEN_CREDENTIAL_URI') }}"
+      token_uri: "{{ env_var('GCP_AUTHORIZATION_URI') }}"
       client_id: "{{ env_var('GCP_CLIENT_ID') }}"
       client_secret: "{{ env_var('GCP_CLIENT_SECRET') }}"
 
