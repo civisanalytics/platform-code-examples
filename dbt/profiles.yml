@@ -18,7 +18,7 @@ dbt-civis:
       pass: "{{ env_var('DATABASE_PASSWORD') }}"
       dbname: "{{ env_var('DATABASE_NAME') }}"
       project: "{{ env_var('GCP_PROJECT_ID') }}"
-      dataset: "{{ env_var('DBT_DATASET_NAME') }}" # You can also use "schema" here
+      schema: "{{ env_var('DBT_DATASET_NAME') }}" # You can also use "schema" here
       refresh_token: "{{ env_var('GCP_PROJECT_ID') }}"
       client_id: "{{ env_var('GCP_CLIENT_ID') }}"
       client_secret: "{{ env_var('GCP_CLIENT_SECRET') }}"
@@ -28,5 +28,5 @@ dbt-civis:
       method: "{{ env_var('GCP_AUTH_METHOD') }}"
       type: "{{ env_var('DATABASE_TYPE') }}"
       project: "{{ env_var('GCP_PROJECT_ID') }}"
-      dataset: "{{ env_var('DBT_DATASET_NAME') }}"
+      schema: "{{ env_var('DBT_DATASET_NAME') }}"
       keyfile: "{{ env_var('GCP_SERVICE_ACCOUNT_KEYFILE_JSON') }}"
