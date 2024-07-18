@@ -9,7 +9,7 @@ dbt-civis:
       user: "{{ env_var('DATABASE_USERNAME') }}"
       pass: "{{ env_var('DATABASE_PASSWORD') }}"
       dbname: "{{ env_var('DATABASE_NAME') }}"
-      schema: "{{ env_var('DATABASE_SCHEMA', 'default_schema_name') }}"
+      schema: "{{ env_var('DATABASE_SCHEMA') }}"
       threads: 4
     bigquery_oauth_adapter:
       threads: 4
@@ -18,8 +18,8 @@ dbt-civis:
       pass: "{{ env_var('DATABASE_PASSWORD') }}"
       dbname: "{{ env_var('DATABASE_NAME') }}"
       project: "{{ env_var('GCP_PROJECT_ID') }}"
-      schema: "{{ env_var('DBT_DATASET_NAME') }}" # You can also use "schema" here
-      refresh_token: "{{ env_var('GCP_PROJECT_ID') }}"
+      schema: "{{ env_var('DATABASE_SCHEMA') }}"
+      refresh_token: "{{ env_var('REFRESH_TOKEN') }}"
       client_id: "{{ env_var('GCP_CLIENT_ID') }}"
       client_secret: "{{ env_var('GCP_CLIENT_SECRET') }}"
       token_uri: "{{ env_var('REDIRECT_URI') }}"
