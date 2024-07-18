@@ -30,4 +30,4 @@ dbt-civis:
       type: "{{ env_var('DATABASE_TYPE') }}"
       project: "{{ env_var('GCP_PROJECT_ID') }}"
       dataset: "{{ env_var('DBT_DATASET_NAME') }}"
-      keyfile: "{{ env_var('GCP_KEYFILE') }}"
+      keyfile: "{{ env_var('GCP_SERVICE_ACCOUNT_KEYFILE_JSON') }}"
