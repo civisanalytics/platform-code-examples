@@ -17,13 +17,13 @@ dbt-civis:
       type: "{{ env_var('DATABASE_TYPE') }}"
 
       dbname: "{{ env_var('DATABASE_NAME') }}"
-      schema: "{{ env_var('DATABASE_SCHEMA', 'default_schema') }}"
+      schema: "{{ env_var('DBT_DATASET_NAME', 'default_schema') }}"
 
       method: "{{ env_var('GCP_AUTH_METHOD') }}"
       project: "{{ env_var('GCP_PROJECT_ID') }}"
       refresh_token: "{{ env_var('GCP_REFRESH_TOKEN') }}"
 
-      # token_uri: "https://platform-staging.civisanalytics.com/credentials/googlauth?"
+      token_uri: "https://platform-staging.civisanalytics.com/credentials/googlauth?"
       client_id: "{{ env_var('GCP_CLIENT_ID') }}"
       client_secret: "{{ env_var('GCP_CLIENT_SECRET') }}"
 
