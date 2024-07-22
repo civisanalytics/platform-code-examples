@@ -23,7 +23,7 @@ dbt-civis:
       project: "{{ env_var('GCP_PROJECT_ID') }}"
       refresh_token: "{{ env_var('GCP_REFRESH_TOKEN') }}"
 
-      token_uri: "https://platform-staging.civisanalytics.com"
+      token_uri: "https://platform-staging.civisanalytics.com/credentials/googlauth"
       client_id: "{{ env_var('GCP_CLIENT_ID') }}"
       client_secret: "{{ env_var('GCP_CLIENT_SECRET') }}"
 
