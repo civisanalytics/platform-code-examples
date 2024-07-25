@@ -9,7 +9,7 @@ dbt-civis:
       user: "{{ env_var('DATABASE_USERNAME') }}"
       pass: "{{ env_var('DATABASE_PASSWORD') }}"
       dbname: "{{ env_var('DATABASE_NAME') }}"
-      schema: "{{ env_var('DATABASE_SCHEMA') }}"
+      schema: "{{ env_var('DBT_SCHEMA') }}"
       threads: 4
 
     bigquery_service_account_adapter:
