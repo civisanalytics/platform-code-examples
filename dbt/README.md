@@ -45,7 +45,7 @@ Below is a quick reference of the environment variables used in the dbt example.
 The environment variables listed below can be used universally across all database types.
 
 - `DATABASE_TYPE`: The database type.
-- `DATABASE_NAME`: The name of the database.
+- `DATABASE_NAME`: The name of the database, e.g. "dev"
 - `DATABASE_SCHEMA`: The name of the schema on the database.
 
 ### PostgreSQL & Redshift
