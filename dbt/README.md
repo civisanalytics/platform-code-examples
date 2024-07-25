@@ -37,7 +37,9 @@ When creating a dbt job with your own git repository, if `profiles.yml` and/or `
 
 ## Environment Variables
 
-Below is a quick reference of the environment variables used in the dbt example. For in depth documentation on the topic, please see the [dbt's environment variables documentation.](https://docs.getdbt.com/docs/build/environment-variables)
+Below is a quick reference of the fundamental environment variables used in the dbt example code, which are provided by Platform when run in that context. For in depth documentation on the topic, please see [our documentation](https://support.civisanalytics.com/hc/en-us/articles/27926077597581-dbt-Scripts). 
+
+ For more information on environment variables automatically used by dbt (which can also be specified from Platform), see [dbt's environment variables documentation.](https://docs.getdbt.com/docs/build/environment-variables)
 
 
 ### Shared Environment Variables
