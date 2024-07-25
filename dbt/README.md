@@ -4,11 +4,11 @@ This directory contains the configuration files, models, and seeds for the dbt (
 
 ## Structure
 
-- [`dbt_project.yml`](command:_github.copilot.openRelativePath?%5B%7B%22scheme%22%3A%22file%22%2C%22authority%22%3A%22%22%2C%22path%22%3A%22%2FUsers%2Fgmendoza%2Fsource%2Fcivis-dbt-docker%2Fplatform-code-examples%2Fdbt%2Fdbt_project.yml%22%2C%22query%22%3A%22%22%2C%22fragment%22%3A%22%22%7D%5D "/Users/gmendoza/source/civis-dbt-docker/platform-code-examples/dbt/dbt_project.yml"): Main configuration file for the dbt project.
-- [`profiles.yml`](command:_github.copilot.openRelativePath?%5B%7B%22scheme%22%3A%22file%22%2C%22authority%22%3A%22%22%2C%22path%22%3A%22%2FUsers%2Fgmendoza%2Fsource%2Fcivis-dbt-docker%2Fplatform-code-examples%2Fdbt%2Fprofiles.yml%22%2C%22query%22%3A%22%22%2C%22fragment%22%3A%22%22%7D%5D "/Users/gmendoza/source/civis-dbt-docker/platform-code-examples/dbt/profiles.yml"): Profiles configuration for dbt, specifying different environments and their settings.
+- [`dbt_project.yml`]( dbt_project.yml ): Main configuration file for the dbt project.
+- [`profiles.yml`]( profiles.yml  ): Profiles configuration for dbt, specifying different environments and their settings.
 - `models/`: Directory containing SQL models for dbt.
   - `docs.md`: Documentation for the models.
-  - [`overview.md`](command:_github.copilot.openRelativePath?%5B%7B%22scheme%22%3A%22file%22%2C%22authority%22%3A%22%22%2C%22path%22%3A%22%2FUsers%2Fgmendoza%2Fsource%2Fcivis-dbt-docker%2Fplatform-code-examples%2Fdbt%2Fmodels%2Foverview.md%22%2C%22query%22%3A%22%22%2C%22fragment%22%3A%22%22%7D%5D "/Users/gmendoza/source/civis-dbt-docker/platform-code-examples/dbt/models/overview.md"): Overview of the dbt project.
+  - [`overview.md`](  ./models/overview.md )): Overview of the dbt project.
   - `schema.yml`: Schema configuration for the models.
   - `staging/`: Directory containing staging models.
     - `stg_customers.sql`: SQL model for staging customers.
@@ -20,11 +20,11 @@ This directory contains the configuration files, models, and seeds for the dbt (
 
 ### dbt_project.yml
 
-The [`dbt_project.yml`](command:_github.copilot.openRelativePath?%5B%7B%22scheme%22%3A%22file%22%2C%22authority%22%3A%22%22%2C%22path%22%3A%22%2FUsers%2Fgmendoza%2Fsource%2Fcivis-dbt-docker%2Fplatform-code-examples%2Fdbt%2Fdbt_project.yml%22%2C%22query%22%3A%22%22%2C%22fragment%22%3A%22%22%7D%5D "/Users/gmendoza/source/civis-dbt-docker/platform-code-examples/dbt/dbt_project.yml") file contains the main configuration for the dbt project, including the project name, version, paths to models, seeds, and other configurations.
+The [`dbt_project.yml`]( dbt_project.yml )file contains the main configuration for the dbt project, including the project name, version, paths to models, seeds, and other configurations.
 
 ### profiles.yml
 
-The [`profiles.yml`](command:_github.copilot.openRelativePath?%5B%7B%22scheme%22%3A%22file%22%2C%22authority%22%3A%22%22%2C%22path%22%3A%22%2FUsers%2Fgmendoza%2Fsource%2Fcivis-dbt-docker%2Fplatform-code-examples%2Fdbt%2Fprofiles.yml%22%2C%22query%22%3A%22%22%2C%22fragment%22%3A%22%22%7D%5D "/Users/gmendoza/source/civis-dbt-docker/platform-code-examples/dbt/profiles.yml") file contains the profiles configuration for dbt, specifying different environments (e.g., development, production) and their settings, such as database credentials and connection details.
+The [`profiles.yml`]( profiles.yml ) file contains the profiles configuration for dbt, specifying different environments (e.g., development, production) and their settings, such as database credentials and connection details.
 
 
 ## Platform Configuration
@@ -37,7 +37,7 @@ When creating a dbt job with your own git repository, if `profiles.yml` and/or `
 
 ## Environment Variables
 
-Below is a quick reference of the fundamental environment variables used in the dbt example code, which are provided by Platform when run in that context. For in depth documentation on the topic, please see [our documentation](https://support.civisanalytics.com/hc/en-us/articles/27926077597581-dbt-Scripts). 
+Below is a quick reference of the fundamental environment variables used in the dbt example code, which are provided by Platform when run in that context. For in depth documentation on the topic, please see [our documentation](https://support.civisanalytics.com/hc/en-us/articles/27926077597581-dbt-Scripts).
 
  For more information on environment variables automatically used by dbt (which can also be specified from Platform), see [dbt's environment variables documentation.](https://docs.getdbt.com/docs/build/environment-variables)
 
@@ -48,7 +48,7 @@ The environment variables listed below can be used universally across all databa
 
 - `DATABASE_TYPE`: The database type.
 - `DATABASE_NAME`: The name of the database, e.g. "dev"
-- `DATABASE_SCHEMA`: The name of the schema on the database.
+- `DBT_SCHEMA`: The name of the schema on the database.
 
 ### PostgreSQL & Redshift
 
