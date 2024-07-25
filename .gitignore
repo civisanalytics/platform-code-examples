@@ -1,3 +1,5 @@
 node_modules/
 **/.mypy_cache
 venv/
+target.tar.gz
+keyfile.json
