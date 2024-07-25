@@ -54,10 +54,10 @@ The environment variables listed below can be used universally across all databa
 
 For PostgreSQL and Redshift connections, the following environment variables are required:
 
-- `DBT_HOST`: The hostname of the database server.
-- `DBT_PORT`: The port number on which the database server is listening.
-- `DBT_USER`: The username to connect to the database.
-- `DBT_PASSWORD`: The password to connect to the database.
+- `DATABASE_HOST`: The hostname of the database server.
+- `DATABASE_PORT`: The port number on which the database server is listening.
+- `DATABASE_USER`: The username to connect to the database.
+- `DATABASE_PASSWORD`: The password to connect to the database.
 
 ### BigQuery
 
