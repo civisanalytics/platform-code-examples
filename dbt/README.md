@@ -59,7 +59,7 @@ For PostgreSQL and Redshift connections, the following environment variables are
 
 ### BigQuery
 
-For BigQuery connections, the following environment variables are required depending on whether you are connecting via a service account json keyfile credentil or via an oauth credential
+For BigQuery connections, the following environment variables are required depending on whether you are connecting via a service account json keyfile credential or via an oauth credential
 
 ### Shared Environment Variables
 
