@@ -10,8 +10,8 @@ This repository contains various code examples and scripts used across different
 - workflows
 
 ### dbt
-Contains dbt models, seeds, and configuration files.
 
+Contains dbt models, seeds, and configuration files.
 
 - `dbt_project.yml`: Main configuration file for the dbt project.
 - `profiles.yml`: Profiles configuration for dbt.
@@ -21,11 +21,13 @@ Contains dbt models, seeds, and configuration files.
 For more details see the [README.md](./dbt/README.md) in the dbt directory.
 
 ### javascript
+
 Contains JavaScript scripts and configurations.
 
 - `email_reporting_scripted_sql/`: Scripts for email reporting using SQL.
 
 ### python
+
 Contains Python scripts and configurations.
 
 - `email_reporting_python/`: Scripts for email reporting using Python.
@@ -33,6 +35,7 @@ Contains Python scripts and configurations.
 - `turn_off_notifications/`: Scripts to turn off notifications.
 
 ### workflows
+
 Contains various workflow scripts.
 
 - `facebook_ad_insights_workflow/`: Workflow for Facebook Ad Insights.
@@ -69,11 +72,3 @@ Contains various workflow scripts.
   ```sh
   pip-compile -o dbt/<version>/requirements.txt dbt/<version>/requirements.txt.in
   ```
-
-## Contributing
-
-Please follow the guidelines in the [pull request template](.github/pull_request_template.md) when submitting changes.
-
-## License
-
-This project is licensed under the MIT License.

@@ -1,4 +1,4 @@
-# dbt Directory
+# dbt Examples
 
 This directory contains the configuration files, models, and seeds for the dbt (Data Build Tool) project. The dbt project is used to transform raw data into a more usable format for analysis.
 
@@ -27,6 +27,9 @@ The [`dbt_project.yml`](command:_github.copilot.openRelativePath?%5B%7B%22scheme
 The [`profiles.yml`](command:_github.copilot.openRelativePath?%5B%7B%22scheme%22%3A%22file%22%2C%22authority%22%3A%22%22%2C%22path%22%3A%22%2FUsers%2Fgmendoza%2Fsource%2Fcivis-dbt-docker%2Fplatform-code-examples%2Fdbt%2Fprofiles.yml%22%2C%22query%22%3A%22%22%2C%22fragment%22%3A%22%22%7D%5D "/Users/gmendoza/source/civis-dbt-docker/platform-code-examples/dbt/profiles.yml") file contains the profiles configuration for dbt, specifying different environments (e.g., development, production) and their settings, such as database credentials and connection details.
 
 ## Environment Variables
+
+Below is a quick reference of the environment variables used in the dbt example. For in depth documentation on the topic, please see the [dbt's environment variables documentation.](https://docs.getdbt.com/docs/build/environment-variables)
+
 
 ### Shared Environment Variables
 
