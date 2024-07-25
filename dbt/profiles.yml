@@ -3,7 +3,7 @@ dbt-civis:
   default: redshift_adapter
   outputs:
     redshift_adapter:
-      type: "{{ env_var('DATABASE_TYPE', 'redshift') }}"
+      type: "{{ env_var('DATABASE_TYPE') }}"
       host: "{{ env_var('DATABASE_HOST') }}"
       port: "{{ env_var('DATABASE_PORT') | as_number }}"
       user: "{{ env_var('DATABASE_USERNAME') }}"
