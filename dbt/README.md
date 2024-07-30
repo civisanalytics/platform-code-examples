@@ -67,7 +67,6 @@ For BigQuery connections, the following environment variables are required depen
 
 - `GCP_AUTH_METHOD`: The BigQuery authentication method.
 - `GCP_PROJECT_ID`: The Project ID of the Google Cloud Platform BigQuery Project
-- `DBT_DATASET_NAME`: The name of the BigQuery Dataset
 
 #### Service Accounts JSON Keyfile
 
