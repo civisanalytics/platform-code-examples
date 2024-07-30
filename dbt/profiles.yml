@@ -1,5 +1,4 @@
 dbt-civis:
-  target: "{{ env_var('DBT_TARGET') }}"
   default: redshift_adapter
   outputs:
     redshift_adapter:
@@ -17,5 +16,5 @@ dbt-civis:
       method: "{{ env_var('GCP_AUTH_METHOD') }}"
       type: "{{ env_var('DATABASE_TYPE') }}"
       project: "{{ env_var('GCP_PROJECT_ID') }}"
-      schema: "{{ env_var('DBT_DATASET_NAME') }}"
+      schema: "{{ env_var('DBT_SCHEMA') }}"
       keyfile: "{{ env_var('GCP_SERVICE_ACCOUNT_KEYFILE_JSON') }}"
