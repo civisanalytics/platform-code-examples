@@ -48,7 +48,7 @@ The environment variables listed below can be used universally across all databa
 
 - `DATABASE_TYPE`: The database type.
 - `DATABASE_NAME`: The name of the database, e.g. "dev"
-- `DBT_SCHEMA`: The name of the schema on the database.
+- `DBT_SCHEMA`: The schema where dbt will create the output tables. Must be a schema where you have ‘create’ permission on.
 
 ### PostgreSQL & Redshift
 
