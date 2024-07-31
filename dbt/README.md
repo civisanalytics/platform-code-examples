@@ -78,7 +78,7 @@ For BigQuery connections, the following environment variables are required depen
 - `GCP_CLIENT_ID`: The GCP OAuth Client ID.
 - `GCP_CLIENT_SECRET`: The GCP OAuth Client Secret.
 - `GCP_TOKEN_CREDENTIAL_URI`: The GCP token credential uri.
-- `DATABASE_PASSWORD`: The GCP Oauth refresh token.
+- `DATABASE_PASSWORD`: The GCP OAuth refresh token.
 - `GCP_SCOPE`: The GCP scopes required to authenticate.
 
 
