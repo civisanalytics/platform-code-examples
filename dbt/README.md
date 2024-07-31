@@ -66,7 +66,7 @@ For BigQuery connections, the following environment variables are required depen
 
 ### Shared Environment Variables
 
-- `GCP_AUTH_METHOD`: The BigQuery authentication method.
+- `GCP_AUTH_METHOD`: The BigQuery authentication method. The following examples expect `oauth-secrets` or  `service-account`.
 - `GCP_PROJECT_ID`: The Project ID of the Google Cloud Platform BigQuery Project.
 
 #### Service Accounts JSON Keyfile
