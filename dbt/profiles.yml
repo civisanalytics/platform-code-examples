@@ -12,9 +12,21 @@ dbt-civis:
       threads: 4
 
     bigquery_service_account_adapter:
-      threads: 4
-      method: "{{ env_var('GCP_AUTH_METHOD') }}"
       type: "{{ env_var('DATABASE_TYPE') }}"
+      method: "{{ env_var('GCP_AUTH_METHOD') }}"
       project: "{{ env_var('GCP_PROJECT_ID') }}"
       schema: "{{ env_var('DBT_SCHEMA') }}"
       keyfile: "{{ env_var('GCP_SERVICE_ACCOUNT_KEYFILE_JSON') }}"
+      threads: 4
+
+    bigquery_oauth_adapter:
+      threads: 4 # Must be a value of 1 or greater
+      type: "{{ env_var('DATABASE_TYPE') }}"
+      method: "{{ env_var('GCP_AUTH_METHOD') }}"
+      project: "{{ env_var('GCP_PROJECT_ID') }}"
+      schema: "{{ env_var('DBT_SCHEMA') }}"
+      refresh_token: "{{ env_var('DATABASE_PASSWORD') }}"
+      client_id: "{{ env_var('GCP_CLIENT_ID') }}"
+      client_secret: "{{ env_var('GCP_CLIENT_SECRET') }}"
+      token_uri: "{{ env_var('GCP_TOKEN_CREDENTIAL_URI') }}"
+      scopes: "{{ env_var('GCP_SCOPE').split(' ') }}"

@@ -46,6 +46,7 @@ Below is a quick reference of the fundamental environment variables used in the 
 
 The environment variables listed below can be used universally across all database types.
 
+- `DBT_TARGET`: The profiles.yml dbt target
 - `DATABASE_TYPE`: The database type.
 - `DATABASE_NAME`: The name of the database, e.g. "dev"
 - `DBT_SCHEMA`: The schema where dbt will create the output tables. Must be a schema you have ‘create’ permission on.
@@ -65,16 +66,20 @@ For BigQuery connections, the following environment variables are required depen
 
 ### Shared Environment Variables
 
-- `GCP_AUTH_METHOD`: The BigQuery authentication method.
-- `GCP_PROJECT_ID`: The Project ID of the Google Cloud Platform BigQuery Project
+- `GCP_AUTH_METHOD`: The BigQuery authentication method. The following examples expect `oauth-secrets` or  `service-account`.
+- `GCP_PROJECT_ID`: The Project ID of the Google Cloud Platform BigQuery Project.
 
 #### Service Accounts JSON Keyfile
 
-- `GCP_SERVICE_ACCOUNT_KEYFILE_JSON`: The GCP Service Account JSON Credential Key File
+- `GCP_SERVICE_ACCOUNT_KEYFILE_JSON`: The GCP Service Account JSON Credential Key File.
 
-#### OAuth Credentials - TODO
+#### OAuth Credentials
 
-
+- `GCP_CLIENT_ID`: The GCP OAuth Client ID.
+- `GCP_CLIENT_SECRET`: The GCP OAuth Client Secret.
+- `GCP_TOKEN_CREDENTIAL_URI`: The GCP token credential uri.
+- `DATABASE_PASSWORD`: The GCP OAuth refresh token.
+- `GCP_SCOPE`: The GCP scopes required to authenticate.
 
 
 
