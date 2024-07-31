@@ -20,10 +20,10 @@ dbt-civis:
 
     bigquery_oauth_adapter:
       threads: 4 # Must be a value of 1 or greater
-      type: bigquery
-      method: oauth-secrets
+      type: "{{ env_var('DATABASE_TYPE') }}"
+      method: "{{ env_var('GCP_AUTH_METHOD') }}"
       project: "{{ env_var('GCP_PROJECT_ID') }}"
-      dataset: "{{ env_var('DBT_SCHEMA') }}"
+      schema: "{{ env_var('DBT_SCHEMA') }}"
       refresh_token: "{{ env_var('DATABASE_PASSWORD') }}"
       client_id: "{{ env_var('GCP_CLIENT_ID') }}"
       client_secret: "{{ env_var('GCP_CLIENT_SECRET') }}"
