@@ -28,7 +28,5 @@ dbt-civis:
       refresh_token: "{{ env_var('DATABASE_PASSWORD') }}"
       client_id: "{{ env_var('GCP_CLIENT_ID') }}"
       client_secret: "{{ env_var('GCP_CLIENT_SECRET') }}"
-      scopes:
-        - "https://www.googleapis.com/auth/bigquery"
-        - "https://www.googleapis.com/auth/userinfo.email"
+      scopes: "https://www.googleapis.com/auth/bigquery https://www.googleapis.com/auth/userinfo.email"
       token_uri: "{{ env_var('GCP_TOKEN_CREDENTIAL_URI') }}"
