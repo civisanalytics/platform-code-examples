@@ -4,3 +4,4 @@ venv/
 target.tar.gz
 keyfile.json
 target**
+logs/
