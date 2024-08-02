@@ -5,5 +5,5 @@ target.tar.gz
 keyfile.json
 target**
 logs/
- manifest.json
+manifest.json
 static_index.html
