@@ -4,3 +4,6 @@ venv/
 target.tar.gz
 keyfile.json
 target**
+logs/
+manifest.json
+static_index.html
