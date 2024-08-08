@@ -58,7 +58,7 @@ For PostgreSQL and Redshift connections, the following environment variables are
 - `DATABASE_HOST`: The hostname of the database server.
 - `DATABASE_PORT`: The port number on which the database server is listening.
 - `DATABASE_USER`: The username to connect to the database.
-- `DATABASE_PASSWORD`: The password to connect to the database.
+- `DBT_ENV_SECRET_DATABASE_PASSWORD`: The password to connect to the database.
 
 ### BigQuery
 
@@ -78,7 +78,7 @@ For BigQuery connections, the following environment variables are required depen
 - `GCP_CLIENT_ID`: The GCP OAuth Client ID.
 - `GCP_CLIENT_SECRET`: The GCP OAuth Client Secret.
 - `GCP_TOKEN_CREDENTIAL_URI`: The GCP token credential uri.
-- `DATABASE_PASSWORD`: The GCP OAuth refresh token.
+- `DBT_ENV_SECRET_DATABASE_PASSWORD`: The GCP OAuth refresh token.
 - `GCP_SCOPE`: The GCP scopes required to authenticate.
 
 
