@@ -6,7 +6,7 @@ dbt-civis:
       host: "{{ env_var('DATABASE_HOST') }}"
       port: "{{ env_var('DATABASE_PORT') | as_number }}"
       user: "{{ env_var('DATABASE_USERNAME') }}"
-      pass: "{{ env_var('DATABASE_PASSWORD') }}"
+      pass: "{{ env_var('DBT_ENV_SECRET_DATABASE_PASSWORD') }}"
       dbname: "{{ env_var('DATABASE_NAME') }}"
       schema: "{{ env_var('DBT_SCHEMA') }}"
       threads: 4
@@ -25,7 +25,7 @@ dbt-civis:
       method: "{{ env_var('GCP_AUTH_METHOD') }}"
       project: "{{ env_var('GCP_PROJECT_ID') }}"
       schema: "{{ env_var('DBT_SCHEMA') }}"
-      refresh_token: "{{ env_var('DATABASE_PASSWORD') }}"
+      refresh_token: "{{ env_var('DBT_ENV_SECRET_DATABASE_PASSWORD') }}"
       client_id: "{{ env_var('GCP_CLIENT_ID') }}"
       client_secret: "{{ env_var('GCP_CLIENT_SECRET') }}"
       token_uri: "{{ env_var('GCP_TOKEN_CREDENTIAL_URI') }}"
