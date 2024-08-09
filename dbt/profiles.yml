@@ -25,4 +25,4 @@ dbt-civis:
       method: "{{ env_var('GCP_AUTH_METHOD') }}"
       project: "{{ env_var('GCP_PROJECT_ID') }}"
       schema: "{{ env_var('DBT_SCHEMA') }}"
-      refresh_token: "{{ env_var('DBT_ENV_SECRET_GCP_ACCESS_TOKEN') }}"
+      token: "{{ env_var('DBT_ENV_SECRET_GCP_ACCESS_TOKEN') }}"
