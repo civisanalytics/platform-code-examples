@@ -1,5 +1,5 @@
 dbt-civis:
-  default: redshift_adapter
+  target: redshift_adapter
   outputs:
     redshift_adapter:
       type: "{{ env_var('DATABASE_TYPE') }}"
