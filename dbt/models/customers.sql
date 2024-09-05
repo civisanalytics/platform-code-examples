@@ -66,6 +66,4 @@ final as (
 
 )
 
-select sleep(60)
-
 select * from final
