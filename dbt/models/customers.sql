@@ -46,7 +46,7 @@ customer_payments as (
 ),
 
 final as (
-
+    
     select
         customers.customer_id,
         customers.first_name,
@@ -65,5 +65,7 @@ final as (
         on  customers.customer_id = customer_payments.customer_id
 
 )
+
+select sleep(60)
 
 select * from final
