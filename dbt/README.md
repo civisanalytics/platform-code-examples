@@ -16,6 +16,45 @@ This directory contains the configuration files, models, and seeds for the dbt (
     - `stg_payments.sql`: SQL model for staging payments.
 - `seeds/`: Directory containing seed files for dbt.
 
+## Essential dbt Commands
+
+### Core Development Commands
+- `dbt run` - Executes your models to create tables/views in the database
+- `dbt test` - Runs data quality tests defined in your models
+- `dbt build` - Runs models and tests together (recommended workflow)
+- `dbt compile` - Compiles SQL without executing (useful for syntax checking)
+
+### Data Management Commands
+- `dbt seed` - Loads CSV files from `seeds/` directory into your database
+- `dbt snapshot` - Creates snapshots for slowly changing dimensions
+- `dbt clean` - Removes compiled files and artifacts from your project
+
+### Project Management Commands
+- `dbt deps` - Downloads package dependencies defined in `packages.yml`
+- `dbt debug` - Tests database connections and validates project setup
+- `dbt docs generate` - Creates documentation for your project
+- `dbt docs serve` - Serves documentation locally in your browser
+
+### Selection and Targeting
+- `dbt run --select model_name` - Run a specific model
+- `dbt run --select +model_name` - Run model and all its upstream dependencies
+- `dbt run --select model_name+` - Run model and all its downstream dependencies
+- `dbt test --select source:*` - Test all source data freshness and quality
+- `dbt run --select staging.*` - Run all models in the staging folder
+
+### Useful Flags
+- `--full-refresh` - Rebuild incremental models completely from scratch
+- `--fail-fast` - Stop execution on first failure
+- `--target dev` - Use a specific profile target (dev, prod, etc.)
+- `--vars '{key: value}'` - Pass variables to your dbt project
+
+### Typical Workflow for This Project
+1. `dbt seed` - Load the CSV files from seeds/ into your database
+2. `dbt run --select staging.*` - Run staging models (stg_customers, stg_orders, stg_payments)
+3. `dbt run --select customers orders` - Run final transformation models
+4. `dbt test` - Validate data quality with tests
+5. `dbt docs generate && dbt docs serve` - Generate and view documentation
+
 ## Configuration
 
 ### dbt_project.yml
