@@ -2,3 +2,4 @@ target/
 .user.yml
 logs/
 target.tar.gz
+.env
