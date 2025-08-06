@@ -15,7 +15,7 @@
   },
   "homepage": "https://github.com/civisanalytics/platform-code-examples#readme",
   "devDependencies": {
-    "eslint": "^6.6.0",
+    "eslint": "^9.32.0",
     "eslint-config-airbnb-base": "^14.0.0",
     "eslint-plugin-import": "^2.18.2"
   }
