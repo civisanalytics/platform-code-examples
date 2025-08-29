@@ -1,0 +1,7 @@
+version: 2
+
+models:
+  - name: customers_materialized
+    description: "Customers data"
+  - name: orders_materialized
+    description: "Orders data"

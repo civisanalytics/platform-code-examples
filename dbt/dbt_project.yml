@@ -31,7 +31,7 @@ models:
     orders:
       +alias: "orders"
     staging:
-      materialized: view
+      +materialized: view
       stg_customers:
         +alias: "{{ env_var('PREFIX', 'dbt') }}stg_customers"
       stg_orders:
@@ -40,5 +40,7 @@ models:
         +alias: "{{ env_var('PREFIX', 'dbt') }}stg_payments"
       +docs:
         node_color: "silver"
+    materialized_views:
+      +materialized: materialized_view
     +docs:
       node_color: "gold"
