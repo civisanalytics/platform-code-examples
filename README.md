@@ -1,6 +1,6 @@
 # Platform Code Examples Repository
 
-This repository contains various code examples and scripts used across different platforms and technologies. It is organized into several directories based on the language and purpose of the scripts.
+This repository contains various code examples and scripts used across different platforms and technologies. It is organized into several directories based on the language and purpose of the scripts!
 
 ## Kinds of Examples
 
