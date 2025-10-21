@@ -84,10 +84,10 @@ my-project-name:
     redshift_adapter:
       type: "{{ env_var(env_var('CODE_CLOUD_REDSHIFT_PREFIX', 'DATABASE') ~ '_TYPE') }}"
       host: "{{ env_var(env_var('CODE_CLOUD_REDSHIFT_PREFIX', 'DATABASE') ~ '_HOST') }}"
-      port: "{{ env_var(env_var('CODE_CLOUD_REDSHIFT_PREFIX', 'DATABASE') ~ _PORT') | as_number }}"
-      user: "{{ env_var(env_var('CODE_CLOUD_REDSHIFT_PREFIX') ~ _CREDENTIAL_USERNAME', 'DATABASE_USERNAME') }}"
-      pass: "{{ env_var('DBT_ENV_SECRET_' ~ env_var('CODE_CLOUD_REDSHIFT_PREFIX') ~ _CREDENTIAL_PASSWORD', 'DBT_ENV_SECRET_DATABASE_PASSWORD') }}"
-      dbname: "{{ env_var(env_var('CODE_CLOUD_REDSHIFT_PREFIX') ~ _DATABASE', 'DATABASE_NAME') }}"
+      port: "{{ env_var(env_var('CODE_CLOUD_REDSHIFT_PREFIX', 'DATABASE') ~ '_PORT') | as_number }}"
+      user: "{{ env_var(env_var('CODE_CLOUD_REDSHIFT_PREFIX') ~ '_CREDENTIAL_USERNAME', 'DATABASE_USERNAME') }}"
+      pass: "{{ env_var('DBT_ENV_SECRET_' ~ env_var('CODE_CLOUD_REDSHIFT_PREFIX') ~ '_CREDENTIAL_PASSWORD', 'DBT_ENV_SECRET_DATABASE_PASSWORD') }}"
+      dbname: "{{ env_var(env_var('CODE_CLOUD_REDSHIFT_PREFIX') ~ '_DATABASE', 'DATABASE_NAME') }}"
       schema: "{{ env_var('DBT_SCHEMA') }}"
       threads: 4
 
