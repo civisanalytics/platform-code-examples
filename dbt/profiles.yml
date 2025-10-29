@@ -2,12 +2,12 @@ dbt-civis:
   target: redshift_adapter
   outputs:
     redshift_adapter:
-      type: "{{ env_var('DATABASE_TYPE') }}"
-      host: "{{ env_var('DATABASE_HOST') }}"
-      port: "{{ env_var('DATABASE_PORT') | as_number }}"
-      user: "{{ env_var('DATABASE_USERNAME') }}"
-      pass: "{{ env_var('DBT_ENV_SECRET_DATABASE_PASSWORD') }}"
-      dbname: "{{ env_var('DATABASE_NAME') }}"
+      type: "{{ env_var('DB_TYPE') }}"
+      host: "{{ env_var('DB_HOST') }}"
+      port: "{{ env_var('DB_PORT') | as_number }}"
+      user: "{{ env_var('DB_CREDENTIAL_USERNAME') }}"
+      pass: "{{ env_var('DBT_ENV_SECRET_DB_CREDENTIAL_PASSWORD') }}"
+      dbname: "{{ env_var('DB_DATABASE') }}"
       schema: "{{ env_var('DBT_SCHEMA') }}"
       threads: 4
 
