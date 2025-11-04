@@ -3,7 +3,7 @@ name: 'civis_jaffle_shop_example'
 config-version: 2
 version: '0.1'
 
-profile: 'dbt-civis'
+profile: 'studio-or-dbt-script'
 
 model-paths: ["models"]
 seed-paths: ["seeds"]
