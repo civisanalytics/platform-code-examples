@@ -36,7 +36,7 @@ dbt-civis:
 # Civis Studios have slightly different environment variables than
 # dbt scripts in Platform (see the dbt-civis profile above for comparison).
 #
-# The following profiles demonstrate the necessary configuration to use dbt in the Civis Studio environment.
+# The following profile demonstrates the necessary configuration to use dbt in the Civis Studio environment.
 # For a database parameter named "civis_consumers":
 #  "params": [
 #    {
