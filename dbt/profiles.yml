@@ -36,7 +36,7 @@ dbt-civis:
 # Civis Studios have slightly different environment variables than
 # dbt scripts in Platform (see the dbt-civis profile above for comparison).
 #
-# The following profiles demonstrate the necessary changes to use the Civis Studio environment:
+# The following profiles demonstrate the necessary configuration to use dbt in the Civis Studio environment.
 # For a database parameter named "civis_consumers":
 #  "params": [
 #    {
@@ -65,82 +65,23 @@ civis-studio:
       schema: "{{ env_var('DBT_SCHEMA') }}"
       threads: 4
 
-    # TODO
-    bigquery_service_account_adapter:
-      type: "{{ env_var('CIVIS_CONSUMER_TYPE') }}"
-      method: "{{ env_var('GCP_AUTH_METHOD') }}"
-      project: "{{ env_var('GCP_PROJECT_ID') }}"
-      schema: "{{ env_var('DBT_SCHEMA') }}"
-      keyfile: "{{ env_var('GCP_SERVICE_ACCOUNT_KEYFILE_JSON') }}"
-      threads: 4
-
     bigquery_oauth_adapter:
       threads: 4 # Must be a value of 1 or greater
       type: "{{ env_var('CIVIS_CONSUMER_TYPE') }}"
-      method: "{{ env_var('GCP_AUTH_METHOD') }}"
-      project: "{{ env_var('GCP_PROJECT_ID') }}"
+      method: "{{ env_var('CIVIS_CONSUMER_GCP_AUTH_METHOD') }}"
+      project: "{{ env_var('CIVIS_CONSUMER_GCP_PROJECT_ID') }}"
       schema: "{{ env_var('DBT_SCHEMA') }}"
-      token: "{{ env_var('DBT_ENV_SECRET_GCP_ACCESS_TOKEN') }}"
+      token: "{{ env_var('DBT_ENV_SECRET_CIVIS_CONSUMER_GCP_ACCESS_TOKEN') }}"
 
-# The following can be used in both studios and Platform dbt scripts, assuming
-# parameters* like the following exist in the studio:
-#  "params": [
-#    {
-#        "name": "civis_consumers", // a redshift database parameter
-#        "description": null,
-#        "type": "database",
-#        "value": "{\"credential\":1234,\"database\":5678}"
-#    }, {
-#        "name": "dbt_schema",
-#        "description": null,
-#        "type": "string",
-#        "value": "my_dbt_schema"
-#    }, {
-#        "name": "code_cloud_redshift_prefix",
-#        "description": null,
-#        "type": "string",
-#        "value": "civis_consumers" // matches the parameter name for the redshift database
-#    }, {
-#        "name": "civis_international_consumers", // a bigquery database parameter
-#        "description": null,
-#        "type": "database",
-#        "value": "{\"credential\":333,\"database\":999}"
-#    }, {
-#        "name": "code_cloud_bigquery_prefix",
-#        "description": null,
-#        "type": "string",
-#        "value": "civis_international_consumers" // matches the parameter name for the BQ database
-#    }
-#  ]
-# *Note: this example includes parameters for both redshift and bigquery, but you'll likely only need
-# one or the other
-studio-or-dbt-script:
-  target: redshift_adapter # sets the default target
-  outputs:
-    # Works for redshift or postgres
-    redshift_adapter:
-      type: "{{ env_var(env_var('CODE_CLOUD_REDSHIFT_PREFIX', 'DATABASE') ~ '_TYPE') }}"
-      host: "{{ env_var(env_var('CODE_CLOUD_REDSHIFT_PREFIX', 'DATABASE') ~ '_HOST') }}"
-      port: "{{ env_var(env_var('CODE_CLOUD_REDSHIFT_PREFIX', 'DATABASE') ~ '_PORT') | as_number }}"
-      user: "{{ env_var(env_var('CODE_CLOUD_REDSHIFT_PREFIX', '') ~ '_CREDENTIAL_USERNAME', 'DATABASE_USERNAME') }}"
-      pass: "{{ env_var('DBT_ENV_SECRET_' ~ env_var('CODE_CLOUD_REDSHIFT_PREFIX', '') ~ '_CREDENTIAL_PASSWORD', 'DBT_ENV_SECRET_DATABASE_PASSWORD') }}"
-      dbname: "{{ env_var(env_var('CODE_CLOUD_REDSHIFT_PREFIX', '') ~ '_DATABASE', 'DATABASE_NAME') }}"
-      schema: "{{ env_var('DBT_SCHEMA') }}"
-      threads: 4
-
-    # TODO
+    # If you'd like to connect to BigQuery using a service account, you can do so by 
+    # writing the credential password (`CIVIS_CONSUMER_CREDENTIAL_PASSWORD` in this example)
+    # to a new file of your choice, then add a `keyfile` param with the file path. 
+    # Be careful not to commit the keyfile to source control.
     bigquery_service_account_adapter:
-      type: "{{ env_var(env_var('CODE_CLOUD_BIGQUERY_PREFIX', 'DATABASE') ~ '_TYPE') }}"
-      method: "{{ env_var('GCP_AUTH_METHOD') }}"
-      project: "{{ env_var('GCP_PROJECT_ID') }}"
+      type: "{{ env_var('CIVIS_CONSUMER_TYPE') }}"
+      method: "{{ env_var('CIVIS_CONSUMER_GCP_AUTH_METHOD') }}"
+      project: "{{ env_var('CIVIS_CONSUMER_GCP_PROJECT_ID') }}"
       schema: "{{ env_var('DBT_SCHEMA') }}"
-      keyfile: "{{ env_var('GCP_SERVICE_ACCOUNT_KEYFILE_JSON') }}"
+      keyfile: "path/to/keyfile.json" # replace this with the path to your keyfile
       threads: 4
 
-    bigquery_oauth_adapter:
-      threads: 4
-      type: "{{ env_var(env_var('CODE_CLOUD_BIGQUERY_PREFIX', 'DATABASE') ~ '_TYPE') }}"
-      method: "{{ env_var('GCP_AUTH_METHOD') }}"
-      project: "{{ env_var('GCP_PROJECT_ID') }}"
-      schema: "{{ env_var('DBT_SCHEMA') }}"
-      token: "{{ env_var('DBT_ENV_SECRET_GCP_ACCESS_TOKEN') }}"
