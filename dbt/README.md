@@ -5,7 +5,7 @@ This directory contains the configuration files, models, and seeds for the dbt (
 ## Structure
 
 - [`dbt_project.yml`]( dbt_project.yml ): Main configuration file for the dbt project.
-- [`profiles.yml`]( profiles.yml  ): Profiles configuration for dbt, specifying different environments and their settings.
+- [`profiles.yml`]( profiles.yml ): Profiles configuration for dbt, specifying different environments and their settings. This contains examples for both Civis dbt scripts and Civis studio environment configurations. Civis Studios follow a slightly different environment variable naming convention, so this file includes examples for use in dbt scripts (`dbt-civis`) and use in a studio (`civis-studio`). Note that Platform dbt scripts can autogenerate this file based on environment variables set on the job!
 - `models/`: Directory containing SQL models for dbt.
   - `docs.md`: Documentation for the models.
   - [`overview.md`](  ./models/overview.md )): Overview of the dbt project.
