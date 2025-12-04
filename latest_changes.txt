@@ -4,4 +4,5 @@ This is the initial commit, created at 5:40 PM EST
 
 This is the second commit, created at 5:44 PM EST
 
-This is my commit from local VSCode
+These lines are committed from my local VSCode
+They should cause a merge conflict when pulled into the studio
