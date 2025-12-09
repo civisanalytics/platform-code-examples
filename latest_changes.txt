@@ -6,3 +6,6 @@ This is the second commit, created at 5:44 PM EST
 
 These lines are committed from my local VSCode
 They should cause a merge conflict when pulled into the studio
+
+These are new lines added even later,
+will cause merge conflicts
