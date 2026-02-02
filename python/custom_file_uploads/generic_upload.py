@@ -155,11 +155,6 @@ The data is now available at: {database}.{full_table}
             },
         )
         future = civis.utils.run_job(email_script_id, client=client).result()
-
-        if not future.succeeded():
-            LOG.warning("Unable to send notification email")
-        else:
-            LOG.info(f"Email sent to {recipient_email}")
     else:
         LOG.info(f"Testing mode: skipping email to {recipient_email}")
 
