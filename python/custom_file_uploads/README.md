@@ -14,7 +14,7 @@ The script performs the following operations:
 
 - **Automatic Schema Assignment**: The script automatically determines which schema to use based on the user's primary group ID
 - **Metadata-Driven Configuration**: Schema mappings are stored in a metadata table, making it easy to configure without code changes
-- **Table Name Configuration**: Table names are set directly in Civis Platform using the "parameters" feature
+- **Table Name Configuration**: Table names are set directly in Civis Platform using the "parameters" feature, if you set up a dropdown parameter then the "value name" will be used as the table name.
 - **Email Notifications**: Optional email notifications upon successful upload
 
 ## Setup Requirements
@@ -62,7 +62,6 @@ python python/custom_file_uploads/generic_upload.py
 
 - `DATABASE`: The name of your Civis database (e.g., 'redshift-general')
 - `TESTING`: Set to `1` to skip email notifications (for testing), `0` for production
-- `EMAIL_RECIPIENTS`: Optional email addresses for notifications (defaults to user's email)
 - `METADATA_TABLE`: The full table name (including schema) of your metadata table
 - `EMAIL_SCRIPT_ID`: The ID of the blank notification script you created in step 2
 
