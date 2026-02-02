@@ -63,13 +63,17 @@ def get_schema(metadata_table: str, database: str, client=None) -> str:
 
     # Create schema if needed
     LOG.info(f"Creating schema {schema} if needed")
-    civis.io.query_civis(
-        f"CREATE SCHEMA IF NOT EXISTS {schema};",
-        database=database,
-    ).result()
+    try:
+        civis.io.query_civis(
+            f"CREATE SCHEMA IF NOT EXISTS {schema};",
+            database=database,
+        ).result()
+    except Exception:
+        LOG.warning("""You do not have permissions to create schemas.
+                    Script will continue and raise an error later
+                     if the schema doesn't exist""")
 
     return schema, user_email
-
 
 
 def download_data_create_table(
@@ -95,13 +99,18 @@ def download_data_create_table(
 
     # Import data to table
     LOG.info(f"Importing data to {full_table}")
-    civis.io.dataframe_to_civis(
-        df=df,
-        database=database,
-        table=full_table,
-        existing_table_rows="fail",
-    )
-    LOG.info(f"Successfully uploaded {len(df)} rows to {full_table}")
+    try:
+        civis.io.dataframe_to_civis(
+            df=df,
+            database=database,
+            table=full_table,
+            existing_table_rows="fail",
+        )
+        LOG.info(f"Successfully uploaded {len(df)} rows to {full_table}")
+    except Exception as e:
+        LOG.error(f"""Failed to upload data to {full_table}: {e}
+                  Please check that the schema exists and you have
+                    permissions to write to it.""")
 
 
 def send_email_notification(
