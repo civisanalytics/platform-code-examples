@@ -4,14 +4,12 @@ Uploads a CSV file to a database table based on user's group and
 dropdown selection.
 The script:
 1. Determines user's schema from metadata table based on primary_group_id
-2. Maps dropdown selection to table name via UPLOAD_OPTIONS config
-3. Drops existing table if present and imports CSV
-4. Sends email notification on completion
+2. Drops existing table if present and imports CSV
+3. Sends email notification on completion
 
 In order to function correctly, the following environment variables must be
   set:
-- UPLOAD_OPTION: Dropdown selection indicating type of data being uploaded
-  (configured in this script)
+- TABLE_NAME: Platform dropdown selection that maps to the table name
 - DATABASE: Target Civis database name
 - METADATA_TABLE: Civis table containing mapping of primary_group_id
   to schema_name
@@ -21,7 +19,7 @@ In order to function correctly, the following environment variables must be
 The template script will also need to accept the following parameters:
 - FILE: Civis file parameter
 - EMAIL: Optional email address for notification
-- UPLOAD_OPTION: Dropdown selection for upload type
+- TABLE_NAME: Platform dropdown selection that maps to the table name
 - TESTING: Optional boolean to indicate testing mode (skip email)
 """
 
@@ -33,12 +31,7 @@ import civis
 import pandas as pd
 
 LOG = civis.loggers.civis_logger()
-# Configuration
-UPLOAD_OPTIONS = {
-    "People Data": "people_data",
-    "Sales Data": "sales_data",
-    "Inventory Data": "inventory_data",
-}
+
 
 
 def get_schema(metadata_table: str, database: str, client=None) -> str:
@@ -79,15 +72,6 @@ def get_schema(metadata_table: str, database: str, client=None) -> str:
 
     return schema, user_email
 
-
-def get_table(upload_option: str):
-    # Get table name from dropdown selection
-    if upload_option not in UPLOAD_OPTIONS:
-        raise ValueError(
-            f"Invalid upload option '{upload_option}'. "
-            f"Valid options: {list(UPLOAD_OPTIONS.keys())}"
-        )
-    return UPLOAD_OPTIONS[upload_option]
 
 
 def download_data_create_table(
@@ -177,7 +161,7 @@ The data is now available at: {database}.{full_table}
 
 def main(
     file_id: int,
-    upload_option: str,
+    table_name: str,
     database: str,
     metadata_table: str,
     email_address: str = None,
@@ -192,8 +176,6 @@ def main(
         database=database,
         client=client,
     )
-
-    table_name = get_table(upload_option)
 
     full_table = f"{schema}.{table_name}"
     LOG.info(f"Target table: {full_table}")
@@ -224,7 +206,7 @@ def main(
 if __name__ == "__main__":
     # Get environment variables
     file_id = int(os.environ["FILE_ID"])
-    upload_option = os.environ["UPLOAD_OPTION"]
+    table_name = os.environ["TABLE_NAME"]
     database = os.environ["DATABASE"]
     metadata_table = os.environ["METADATA_TABLE"]
     email_address = os.getenv("EMAIL")
@@ -232,7 +214,7 @@ if __name__ == "__main__":
 
     main(
         file_id=file_id,
-        upload_option=upload_option,
+        table_name=table_name,
         database=database,
         metadata_table=metadata_table,
         email_address=email_address,
