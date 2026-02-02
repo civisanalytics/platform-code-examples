@@ -25,7 +25,6 @@ The template script will also need to accept the following parameters:
 
 import os
 import tempfile
-from distutils.util import strtobool
 
 import civis
 import pandas as pd
@@ -113,18 +112,16 @@ def send_email_notification(
     full_table: str,
     database: str,
     user_email: str,
-    upload_option: str,
     file_obj: dict,
     testing: bool = False,
     client=None,
 ):
     client = client or civis.APIClient()
     recipient_email = email_address if email_address else user_email
-    email_subject = f"Data Upload Complete: {upload_option}"
+    email_subject = f"Data Upload Complete"
     email_body = f"""Your data upload has been completed successfully.
 
 File: {file_obj['name']}
-Upload Type: {upload_option}
 Database: {database}
 Schema: {schema}
 Table: {table_name}
@@ -194,7 +191,6 @@ def main(
         full_table=full_table,
         database=database,
         user_email=user_email,
-        upload_option=upload_option,
         file_obj=client.files.get(file_id),
         testing=testing,
         client=client,
@@ -210,7 +206,8 @@ if __name__ == "__main__":
     database = os.environ["DATABASE"]
     metadata_table = os.environ["METADATA_TABLE"]
     email_address = os.getenv("EMAIL")
-    testing = strtobool(os.getenv("TESTING", "false"))
+    testing = os.getenv("TESTING", "false")
+    print(testing)
 
     main(
         file_id=file_id,
