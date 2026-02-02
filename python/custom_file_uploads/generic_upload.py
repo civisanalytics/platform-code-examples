@@ -32,7 +32,6 @@ import pandas as pd
 LOG = civis.loggers.civis_logger()
 
 
-
 def get_schema(metadata_table: str, database: str, client=None) -> str:
     client = client or civis.APIClient()
 
@@ -206,9 +205,7 @@ if __name__ == "__main__":
     database = os.environ["DATABASE"]
     metadata_table = os.environ["METADATA_TABLE"]
     email_address = os.getenv("EMAIL")
-    testing = os.getenv("TESTING", "false")
-    print(testing)
-
+    testing = int(os.getenv("TESTING", 0)) == 1
     main(
         file_id=file_id,
         table_name=table_name,
