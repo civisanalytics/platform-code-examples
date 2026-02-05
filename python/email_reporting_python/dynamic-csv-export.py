@@ -22,35 +22,36 @@ SQL = 'SELECT * FROM schema.your_table'
 # Swap out the filename prefix for your own (date will be appended automatically)
 FILENAME_PREFIX = 'your_export_'
 
+
 def main():
     # Generate filename with today's date in MMDDYYYY format
     # Example output: your_export_02022026.csv
     today = datetime.now().strftime('%m%d%Y')
     filename = f"{FILENAME_PREFIX}{today}.csv"
-    
+
     # Export query results to a temporary CSV file on the script's container
     # The .result() call waits for the export job to complete before continuing
     local_path = f"/tmp/{filename}"
     civis.io.civis_to_csv(local_path, SQL, DATABASE).result()
-    
+
     # Upload the CSV to Civis Files with the dynamic filename
     # This returns a file_id that can be used to retrieve the file later
     file_id = civis.io.file_to_civis(local_path, name=filename)
-    
+
     # Retrieve the file metadata to get the download URL
     client = civis.APIClient()
     file_info = client.files.get(file_id)
     file_url = file_info.download_url
-    
+
     # Create a dictionary with the download link
     # The key 'file_link' will become the variable {{file_link}} in the email
     json_value_dict = {
         'file_link': file_url
     }
-    
+
     # Upload the dictionary as a run output so it can be used in the email
     post_json_run_output(json_value_dict)
-    
+
     # Print confirmation to the logs
     print(f"File uploaded with ID: {file_id}")
     print(f"Filename: {filename}")
@@ -72,6 +73,7 @@ def main():
 # Function below will not require editing, but
 # needs to be included in the script
 
+
 def post_json_run_output(json_value_dict):
     client = civis.APIClient()
     json_value_object = client.json_values.post(
@@ -82,6 +84,7 @@ def post_json_run_output(json_value_dict):
         os.environ['CIVIS_RUN_ID'],
         'JSONValue',
         json_value_object.id)
+
 
 if __name__ == '__main__':
     main()
