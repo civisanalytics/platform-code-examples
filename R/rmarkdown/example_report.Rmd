@@ -1,0 +1,87 @@
+---
+title: "Example R Markdown Report"
+author: "Civis Analytics"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: cosmo
+  pdf_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+## Introduction
+
+This is an example R Markdown report designed to work with Civis Platform. R Markdown allows you to create documents that combine analysis, visualizations, and narrative text.
+
+## Data Analysis
+
+### Loading Libraries
+
+```{r libraries}
+library(ggplot2)
+library(dplyr)
+
+# Civis Platform library
+library(civis)
+```
+
+### Sample Data
+
+For this example, we'll use the built-in `mtcars` dataset:
+
+```{r data}
+# Display first few rows
+head(mtcars)
+
+# Summary statistics
+summary(mtcars)
+```
+
+### Data Visualization
+
+```{r plot, fig.width=8, fig.height=6}
+ggplot(mtcars, aes(x = wt, y = mpg, color = factor(cyl))) +
+  geom_point(size = 3) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(
+    title = "Fuel Efficiency vs. Weight",
+    x = "Weight (1000 lbs)",
+    y = "Miles per Gallon",
+    color = "Cylinders"
+  ) +
+  theme_minimal()
+```
+
+### Statistical Analysis
+
+```{r analysis}
+# Linear regression model
+model <- lm(mpg ~ wt + hp, data = mtcars)
+
+# Model summary
+summary(model)
+```
+
+## Results
+
+The analysis shows a negative correlation between vehicle weight and fuel efficiency. Heavier vehicles tend to have lower miles per gallon.
+
+### Key Findings
+
+- Average MPG: `r round(mean(mtcars$mpg), 2)`
+- Vehicles analyzed: `r nrow(mtcars)`
+- Weight coefficient: `r round(coef(model)["wt"], 3)`
+
+## Conclusion
+
+This example demonstrates how R Markdown can be used to create reproducible reports that combine code, analysis, and visualizations in a single document.
+
+---
+
+*Report generated on `r Sys.time()`*
