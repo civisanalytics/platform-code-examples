@@ -20,7 +20,7 @@
 # Replace "/app/path/to/example.Rmd" with the actual path in your repository
 
 Rscript -e '
-reportId <- civis::publish_rmd("/app/R/example_report.Rmd");
+reportId <- civis::publish_rmd("/app/R/rmarkdown/example_report.Rmd");
 jobId <- as.numeric(Sys.getenv("CIVIS_JOB_ID"));
 runId <- as.numeric(Sys.getenv("CIVIS_RUN_ID"));
 civis::scripts_post_containers_runs_outputs(jobId, runId, "Report", reportId)
