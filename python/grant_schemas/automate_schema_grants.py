@@ -62,26 +62,26 @@ def get_schema_grants_config():
         }
     """
     mapping = {}
-    
+
     for config in SCHEMA_GRANTS_CONFIG:
         schema = config.get('schema_name')
         groups = config.get('groups', [])
         table_creators = config.get('table_creators', [])
-        
+
         if schema and groups:
             mapping[schema] = {
                 "schema": schema,
                 "groups": tuple(groups),
                 "table_creators": table_creators,
             }
-    
+
     return mapping
 
 
 def main(database, dry_run=True, grant_usage=False, grant_future=True):
     grant_commands = []
     schema_grants = get_schema_grants_config()
-    
+
     for schema_name in schema_grants:
         schema = schema_grants[schema_name]["schema"]
         groups = schema_grants[schema_name]["groups"]
@@ -94,25 +94,34 @@ def main(database, dry_run=True, grant_usage=False, grant_future=True):
         # Note: In Redshift, "ALL TABLES" includes tables, views, and external tables
         select_command = f"GRANT SELECT ON ALL TABLES IN SCHEMA {schema} TO GROUP {', GROUP '.join(groups)};"
         grant_commands.append(select_command)
-        
+
         # Grant on future tables and views (if enabled)
         # IMPORTANT: ALTER DEFAULT PRIVILEGES only applies to objects created by specific users
         if grant_future:
             table_creators = schema_grants[schema_name].get("table_creators", [])
-            
+
             if table_creators:
                 # Grant for each specified table creator
                 for creator in table_creators:
                     for group in groups:
-                        future_command = f"ALTER DEFAULT PRIVILEGES FOR USER {creator} IN SCHEMA {schema} GRANT SELECT ON TABLES TO GROUP {group};"
+                        future_command = (
+                            f"ALTER DEFAULT PRIVILEGES FOR USER {creator} IN SCHEMA {schema} "
+                            f"GRANT SELECT ON TABLES TO GROUP {group};"
+                        )
                         grant_commands.append(future_command)
             else:
                 # No table_creators specified - grant for the current user running the script
                 # This will only apply to tables created by this user!
                 for group in groups:
-                    future_command = f"ALTER DEFAULT PRIVILEGES IN SCHEMA {schema} GRANT SELECT ON TABLES TO GROUP {group};"
+                    future_command = (
+                        f"ALTER DEFAULT PRIVILEGES IN SCHEMA {schema} "
+                        f"GRANT SELECT ON TABLES TO GROUP {group};"
+                    )
                     grant_commands.append(future_command)
-                LOG.warning(f"No table_creators specified for schema '{schema}'. Default privileges will only apply to tables created by the user running this script.")
+                LOG.warning(
+                    f"No table_creators specified for schema '{schema}'. "
+                    f"Default privileges will only apply to tables created by the user running this script."
+                )
 
     query = "\n".join(grant_commands)
 
@@ -135,8 +144,8 @@ if __name__ == "__main__":
     GRANT_USAGE = strtobool(str(os.environ.get('GRANT_USAGE', 'False')))
     GRANT_FUTURE = strtobool(str(os.environ.get('GRANT_FUTURE', 'True')))
     DATABASE = os.environ.get('DATABASE')
-    
+
     if not DATABASE:
         raise ValueError("DATABASE environment variable must be set")
-    
+
     main(database=DATABASE, dry_run=DRY_RUN_PARAM, grant_usage=GRANT_USAGE, grant_future=GRANT_FUTURE)
