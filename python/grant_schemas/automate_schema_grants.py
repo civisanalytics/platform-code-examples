@@ -1,19 +1,26 @@
 """
-This script automates granting SELECT access (and optionally USAGE) on database schemas to specified groups.
-For each configured schema, it grants permissions to all associated groups on all tables and views within that schema.
+This script automates granting SELECT access (and optionally USAGE) on
+database schemas to specified groups.
+For each configured schema, it grants permissions to all associated groups
+on all tables and views within that schema.
 
-This script must be run with authorized superuser account credential on the affected database.
+This script must be run with authorized superuser account credential on the
+affected database.
 
 Configuration:
 - Set the DATABASE environment variable to specify which database to use
-- Edit the SCHEMA_GRANTS_CONFIG list below to map schemas to their authorized groups
+- Edit the SCHEMA_GRANTS_CONFIG list below to map schemas to their authorized
+  groups
 - Set DRY_RUN=True to preview changes without executing them
 - Set GRANT_USAGE=True to also grant USAGE permissions on schemas
-- Set GRANT_FUTURE=True to grant permissions on future tables/views (default: True)
+- Set GRANT_FUTURE=True to grant permissions on future tables/views
+  (default: True)
 
-IMPORTANT: ALTER DEFAULT PRIVILEGES in Redshift only applies to objects created by specific users.
-You must specify the 'table_creators' list for each schema to include all users who might create tables.
-Otherwise, default privileges will only apply to tables created by the user running this script.
+IMPORTANT: ALTER DEFAULT PRIVILEGES in Redshift only applies to objects
+created by specific users. You must specify the 'table_creators' list
+ for each schema to include all users who might create tables.
+Otherwise, default privileges will only apply to tables created
+ by the user running this script.
 
 Note: In Redshift, "ALL TABLES" includes tables, views, and external tables.
 """
@@ -33,10 +40,10 @@ logging.basicConfig(level=logging.INFO, format=FORMAT)
 # ========================================
 SCHEMA_GRANTS_CONFIG = [
     {
-        'schema_name': 'example_schema',
-        'groups': ['example_group_1', 'example_group_2', 'read_only_users'],
-        'table_creators': [],  # Optional: usernames who can create tables in this schema
-        'notes': 'Example schema - replace with your actual schemas and groups'
+        "schema_name": "example_schema",
+        "groups": ["example_group_1", "example_group_2", "read_only_users"],
+        "table_creators": [],  # Optional: usernames who can create tables in this schema
+        "notes": "Example schema - replace with your actual schemas and groups",
     },
     # Add more schema-to-groups mappings here as needed
     # {
@@ -64,9 +71,9 @@ def get_schema_grants_config():
     mapping = {}
 
     for config in SCHEMA_GRANTS_CONFIG:
-        schema = config.get('schema_name')
-        groups = config.get('groups', [])
-        table_creators = config.get('table_creators', [])
+        schema = config.get("schema_name")
+        groups = config.get("groups", [])
+        table_creators = config.get("table_creators", [])
 
         if schema and groups:
             mapping[schema] = {
@@ -87,12 +94,15 @@ def main(database, dry_run=True, grant_usage=False, grant_future=True):
         groups = schema_grants[schema_name]["groups"]
 
         if grant_usage:
-            usage_command = f"GRANT USAGE ON SCHEMA {schema} TO GROUP {', GROUP '.join(groups)};"
+            usage_command = (
+                f"GRANT USAGE ON SCHEMA {schema} TO GROUP {', GROUP '.join(groups)};"
+            )
             grant_commands.append(usage_command)
 
         # Grant on existing tables and views
         # Note: In Redshift, "ALL TABLES" includes tables, views, and external tables
-        select_command = f"GRANT SELECT ON ALL TABLES IN SCHEMA {schema} TO GROUP {', GROUP '.join(groups)};"
+        select_command = f"""GRANT SELECT ON ALL TABLES IN SCHEMA {schema}
+                             TO GROUP {', GROUP '.join(groups)};"""
         grant_commands.append(select_command)
 
         # Grant on future tables and views (if enabled)
@@ -120,7 +130,8 @@ def main(database, dry_run=True, grant_usage=False, grant_future=True):
                     grant_commands.append(future_command)
                 LOG.warning(
                     f"No table_creators specified for schema '{schema}'. "
-                    f"Default privileges will only apply to tables created by the user running this script."
+                    f"Default privileges will only apply to tables created"
+                    " by the user running this script."
                 )
 
     query = "\n".join(grant_commands)
@@ -140,12 +151,17 @@ def main(database, dry_run=True, grant_usage=False, grant_future=True):
 if __name__ == "__main__":
     # Different Platform/cloud environments use slightly different formats for Boolean parameters;
     # This provides some assurance that "truthy" values are assigned properly.
-    DRY_RUN_PARAM = strtobool(str(os.environ.get('DRY_RUN', 'True')))
-    GRANT_USAGE = strtobool(str(os.environ.get('GRANT_USAGE', 'False')))
-    GRANT_FUTURE = strtobool(str(os.environ.get('GRANT_FUTURE', 'True')))
-    DATABASE = os.environ.get('DATABASE')
+    DRY_RUN_PARAM = strtobool(str(os.environ.get("DRY_RUN", "True")))
+    GRANT_USAGE = strtobool(str(os.environ.get("GRANT_USAGE", "False")))
+    GRANT_FUTURE = strtobool(str(os.environ.get("GRANT_FUTURE", "True")))
+    DATABASE = os.environ.get("DATABASE")
 
     if not DATABASE:
         raise ValueError("DATABASE environment variable must be set")
 
-    main(database=DATABASE, dry_run=DRY_RUN_PARAM, grant_usage=GRANT_USAGE, grant_future=GRANT_FUTURE)
+    main(
+        database=DATABASE,
+        dry_run=DRY_RUN_PARAM,
+        grant_usage=GRANT_USAGE,
+        grant_future=GRANT_FUTURE,
+    )
