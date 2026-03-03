@@ -45,7 +45,7 @@ When setting up this script in Civis Platform, create a container script with th
 cd /app;
 export DATABASE='redshift-general'
 export TESTING=0
-export EMAIL_RECIPIENTS=""
+export EMAIL=""
 export METADATA_TABLE="metadata_data_upload_mmk"
 export EMAIL_SCRIPT_ID="340695845"
 python python/custom_file_uploads/generic_upload.py
@@ -65,7 +65,7 @@ In the Civis Platform script configuration, add the following parameters:
 - **FILE**: File parameter (required) - Users will upload their CSV file here
 - **TABLE_NAME**: Dropdown or text parameter (required) - The name of the target table
 - **EMAIL**: Text parameter (optional) - Email address for notification
-- **TESTING**: Boolean parameter (optional) - Set to true to skip sending emails
+- **TESTING**: Numeric 0/1 (optional) - Set to true to skip sending emails
 
 ## Usage
 
