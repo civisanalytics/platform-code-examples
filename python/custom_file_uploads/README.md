@@ -105,7 +105,7 @@ VALUES
 
 - **"No schema mapping found"**: Ensure your primary group ID is added to the metadata table
 - **Schema creation errors**: You may need database permissions to create schemas, or ensure the schema already exists
-- **Email not received**: Check that the SCRIPT_ID points to a valid script and TESTING is set to 0
+- **Email not received**: Check that the EMAIL_SCRIPT_ID points to a valid script and TESTING is set to 0
 
 ## Notes
 

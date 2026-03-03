@@ -32,7 +32,7 @@ import pandas as pd
 LOG = civis.loggers.civis_logger()
 
 
-def get_schema(metadata_table: str, database: str, client=None) -> str:
+def get_schema(metadata_table: str, database: str, client=None) -> tuple[str, str]:
     client = client or civis.APIClient()
 
     # Get user info
@@ -69,9 +69,11 @@ def get_schema(metadata_table: str, database: str, client=None) -> str:
             database=database,
         ).result()
     except Exception:
-        LOG.warning("""You do not have permissions to create schemas.
+        LOG.warning(
+            """You do not have permissions to create schemas.
                     Script will continue and raise an error later
-                     if the schema doesn't exist""")
+                     if the schema doesn't exist"""
+        )
 
     return schema, user_email
 
@@ -107,12 +109,14 @@ def download_data_create_table(
             existing_table_rows="fail",
         )
         LOG.info(f"Successfully uploaded {len(df)} rows to {full_table}")
-        return 'scuccess'
+        return "scuccess"
     except Exception as e:
-        LOG.error(f"""Failed to upload data to {full_table}: {e}
+        LOG.error(
+            f"""Failed to upload data to {full_table}: {e}
                   Please check that the schema exists and you have
-                    permissions to write to it.""")
-        return 'failure'
+                    permissions to write to it."""
+        )
+        return "failure"
 
 
 def send_email_notification(
@@ -189,7 +193,7 @@ def main(
         client=client,
     )
 
-    if status == 'success':
+    if status == "success":
         send_email_notification(
             email_address=email_address,
             table_name=table_name,
