@@ -10,13 +10,6 @@ The script performs the following operations:
 2. **Table Creation**: Drops the existing table if present and imports the CSV data
 3. **Email Notification**: Sends an email notification upon successful completion
 
-## Key Features
-
-- **Automatic Schema Assignment**: The script automatically determines which schema to use based on the user's primary group ID
-- **Metadata-Driven Configuration**: Schema mappings are stored in a metadata table, making it easy to configure without code changes
-- **Table Name Configuration**: Table names are set directly in Civis Platform using the "parameters" feature, if you set up a dropdown parameter then the "value name" will be used as the table name.
-- **Email Notifications**: Optional email notifications upon successful upload
-
 ## Setup Requirements
 
 ### 1. Create a Metadata Table

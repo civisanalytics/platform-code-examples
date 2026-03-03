@@ -126,7 +126,7 @@ def send_email_notification(
 ):
     client = client or civis.APIClient()
     recipient_email = email_address if email_address else user_email
-    email_subject = f"Data Upload Complete"
+    email_subject = "Data Upload Complete"
     email_body = f"""Your data upload has been completed successfully.
 
 File: {file_obj['name']}
@@ -154,7 +154,7 @@ The data is now available at: {database}.{full_table}
                 "success_email_addresses": [recipient_email],
             },
         )
-        future = civis.utils.run_job(email_script_id, client=client).result()
+        civis.utils.run_job(email_script_id, client=client).result()
     else:
         LOG.info(f"Testing mode: skipping email to {recipient_email}")
 
