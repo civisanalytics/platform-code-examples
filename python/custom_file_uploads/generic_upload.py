@@ -107,10 +107,12 @@ def download_data_create_table(
             existing_table_rows="fail",
         )
         LOG.info(f"Successfully uploaded {len(df)} rows to {full_table}")
+        return 'scuccess'
     except Exception as e:
         LOG.error(f"""Failed to upload data to {full_table}: {e}
                   Please check that the schema exists and you have
                     permissions to write to it.""")
+        return 'failure'
 
 
 def send_email_notification(
@@ -180,26 +182,27 @@ def main(
     full_table = f"{schema}.{table_name}"
     LOG.info(f"Target table: {full_table}")
 
-    download_data_create_table(
+    status = download_data_create_table(
         file_id=file_id,
         full_table=full_table,
         database=database,
         client=client,
     )
 
-    send_email_notification(
-        email_address=email_address,
-        table_name=table_name,
-        schema=schema,
-        full_table=full_table,
-        database=database,
-        user_email=user_email,
-        file_obj=client.files.get(file_id),
-        testing=testing,
-        client=client,
-    )
+    if status == 'success':
+        send_email_notification(
+            email_address=email_address,
+            table_name=table_name,
+            schema=schema,
+            full_table=full_table,
+            database=database,
+            user_email=user_email,
+            file_obj=client.files.get(file_id),
+            testing=testing,
+            client=client,
+        )
 
-    LOG.info("Upload process completed successfully")
+        LOG.info("Upload process completed successfully")
 
 
 if __name__ == "__main__":
