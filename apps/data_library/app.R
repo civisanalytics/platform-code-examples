@@ -3,13 +3,16 @@
 # Uses static mock data in place of database queries.
 # Derived from apps/mdive_landing_page/app.R
 
+# install shinycssloaders
+install.packages("shinycssloaders")
+
 library(shiny)
 library(shinydashboard)
 library(stringr)
 library(dplyr)
 library(shinyBS)
 library(shinyWidgets)
-# library(shinycssloaders)
+library(shinycssloaders)
 library(shinyjs)
 
 source('components.R')
