@@ -1,0 +1,136 @@
+/*
+This file specifies 18F guidelines for the MDIVE landing page
+It adjusts the outline color of boxes, dashboard sidebar color,
+hover color for dashboard navigation, etc.
+*/
+
+.center {
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+  width: 80%;
+}
+
+.btn-18f:hover {
+  background-color:#046b99;
+  color:white;
+}
+
+.btn-18f-selected {
+  background-color:#046b99;
+  color:white;
+}
+
+.btn-18f-selected:hover {
+  background-color:#046b99;
+  color:white;
+}
+
+
+/* 18F medium blue*/
+.main-sidebar {
+            background-color: #046b99 !important;
+          }
+
+/* 18F lightest gray*/
+.box.box-primary {
+  border:3px solid #f1f1f1;
+}
+
+/* 18F Colors (white) - app background*/
+.content-wrapper {
+            background-color: white !important;
+          }
+
+/* logo */
+        .main-header .logo {
+                              background-color: #ffffff !important;
+                              }
+
+        /* logo when hovered */
+        .main-header .logo:hover {
+                              background-color: #ffffff !important;
+                              }
+
+ /* navbar (rest of the header) */
+        .main-header .navbar {
+                              background-color: #ffffff !important;
+                              }
+
+
+/* 18F Colors (medium blue hover)*/
+        /* active selected tab in the sidebarmenu */
+        .main-sidebar .sidebar .sidebar-menu .active a{
+                              background-color: #034c6d;
+                              }
+
+/* 18F medium hover blue*/
+        /* other links in the sidebarmenu when hovered */
+         .main-sidebar .sidebar .sidebar-menu a:hover{
+                              background-color: #034c6d;
+                              }
+
+      /* 18F medium hover blue*/
+        /* toggle button when hovered  */
+         .main-header .navbar .sidebar-toggle:hover{
+                              background-color: #034c6d;
+                              }
+
+        /* 18F medium blue*/
+        .main-sidebar .sidebar .sidebar-menu .treeview li.active a {
+          background-color: #046b99 !important;
+        }
+
+        /* 18F medium hover blue*/
+        .main-sidebar .sidebar .sidebar-menu .treeview-menu a {
+          background-color: #034c6d !important;
+        }
+
+        /* 18F medium blue*/
+        .main-sidebar .sidebar .sidebar-menu .treeview-menu a:hover {
+          background-color: #046b99 !important;
+        }
+
+.main-sidebar .sidebar .sidebar-menu .dropdown a:hover{
+                              background-color: #f1f1f1;
+                              }
+
+.main-sidebar .sidebar .sidebar-menu .dropdown-menu .active a{
+                              background-color: #f1f1f1;
+                              }
+
+
+/* 18F medium blue*/
+a {
+  color:#046b99;
+}
+
+/* 18F medium hover blue*/
+a:hover {
+  color:#034c6d;
+}
+
+.well {
+  border: 3px solid #f1f1f1;
+}
+
+::-webkit-scrollbar {
+  -webkit-appearance: none;
+  width: 7px;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background-color: rgba(0, 0, 0, .5);
+  box-shadow: 0 0 1px rgba(255, 255, 255, .5);
+}
+
+.btn-18f-dark {
+  background-color:#046b99;
+  color:white;
+}
+
+.btn-18f-dark:hover {
+  background-color:#034c6d;
+  color:white;
+}
