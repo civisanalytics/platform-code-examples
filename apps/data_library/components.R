@@ -117,10 +117,9 @@ resultsCardUI <- function(id, input_data, rownum,
   tech_area_buttons = create_buttons(tech_area_list, tech_area_filter_list, ns)
 
   wellPanel(style = "background-color:white; color:black",
-    bsTooltip(id = ns('link_title'), title = 'Click to view full description',
-              placement = "right", trigger = 'hover', options = list(container = "body")),
     div(class = 'row results-header', style = 'padding-left:12px',
-        strong(input_data[rownum, "name"])
+        tags$span(input_data[rownum, "name"],
+                  style = 'margin-top:0px; text-decoration:underline; color:#046b99; font-weight:600; font-size:21px;')
     ),
     div(class = 'row results-body',
         div(class = 'col-sm-8 results-body-main',
