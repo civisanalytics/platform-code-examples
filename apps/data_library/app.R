@@ -9,7 +9,7 @@ library(stringr)
 library(dplyr)
 library(shinyBS)
 library(shinyWidgets)
-library(shinycssloaders)
+# library(shinycssloaders)
 library(shinyjs)
 
 source('components.R')
