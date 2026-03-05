@@ -1,7 +1,5 @@
 # Demo App - UI Components
 # Derived from apps/mdive_landing_page/components.R
-# Changes: removed civis dependency (get_org_admins), inlined 18f_custom_ui.R,
-# simplified boxButtonServer to always grant access (no access gate).
 
 # Inlined from style_files/18f_custom_ui.R
 actionButton18F <- function(..., theme = 'light') {
@@ -143,7 +141,8 @@ resultsCardUI <- function(id, input_data, rownum,
 
 
 resultsCardServer <- function(id, parent_session, data, row,
-                              tag_filter_list, tech_area_filter_list) {
+                              tag_filter_list, tech_area_filter_list,
+                              selection = NULL) {
 
   moduleServer(id, function(input, output, session) {
     tag_list <- data[row, 'tags'] %>% str_split(';') %>% unlist() %>% trimws('both')
@@ -151,6 +150,13 @@ resultsCardServer <- function(id, parent_session, data, row,
 
     update_input(input, tag_list, tag_filter_list, parent_session, 'dataset_choice')
     update_input(input, tech_area_list, tech_area_filter_list, parent_session, 'tech_area')
+
+    # When title is clicked, tell the parent which dataset was selected
+    if (!is.null(selection)) {
+      observeEvent(input$link_title, {
+        selection$name <- data[row, "name"]
+      })
+    }
   })
 }
 

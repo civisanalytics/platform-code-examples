@@ -1,9 +1,6 @@
 # M-DIVE Landing Page — Demo Version
-# Self-contained demo with no external dependencies (no Civis, no mdiver).
-# Uses static mock data in place of database queries.
 # Derived from apps/mdive_landing_page/app.R
 
-# install shinycssloaders
 install.packages("shinycssloaders")
 
 library(shiny)
@@ -17,78 +14,7 @@ library(shinyjs)
 
 source('components.R')
 source('app-text.R')
-
-# ── Static Mock Data ──────────────────────────────────────────────────────────
-
-reports_data <- data.frame(
-  name = c(
-    "Quarterly Report",
-    "Facility Level Dashboard",
-    "Cases Dashboard",
-    "Disease in Pregnancy Dashboard",
-    "Treatment Dashboard"
-  ),
-  description = c(
-    "Tracks confirmed cases, deaths, and reporting rates across a selection of countries on a quarterly basis.",
-    "Monitors reporting rates and case data at the facility level for targeted follow-up.",
-    "Summarizes case data across supported regions.",
-    "Monitors disease in pregnancy indicators across supported regions.",
-    "Tracks treatment indicators across supported regions."
-  ),
-  report_type      = c("Shiny", "Shiny", "Shiny", "Shiny", "Tableau"),
-  development_status = c("Production", "Production", "In Development", "Production", "Production"),
-  technical_area   = c("Reporting", "Reporting", "Measurement", "Measurement", "Treatment"),
-  tags             = c(
-    "quarterly;cases;reporting",
-    "facility;reporting;cases",
-    "cases;measurement",
-    "disease;pregnancy;measurement",
-    "treatment;cases"
-  ),
-  category         = c("General", "General", "Interventions", "Interventions", "Interventions"),
-  featured         = c(1, 2, 3, 4, 5),
-  location_link    = rep("#", 5),
-  stringsAsFactors = FALSE
-)
-
-data <- data.frame(
-  name = c(
-    "Reporting Table",
-    "Facility Master List",
-    "Stock Data",
-    "Coverage Data",
-    "Population Estimates"
-  ),
-  description = c(
-    "Monthly reporting data aggregated from national systems across supported countries.",
-    "Master list of all supported health facilities including location and administrative hierarchy.",
-    "Logistics management data including commodity stockouts, consumption, and stock on hand.",
-    "Seasonal campaign coverage data by cycle and administrative unit.",
-    "Annual population estimates by administrative unit used for rate calculations."
-  ),
-  technical_area       = c("Case Management", "Health Systems", "Supply Chain", "Coverage", "Population"),
-  tags                 = c(
-    "monthly;reporting;cases",
-    "facility;reporting;cases",
-    "stock;logistics;commodities",
-    "coverage;campaigns;SMC",
-    "population;denominators"
-  ),
-  access_restrictions  = c(
-    "Open use",
-    "Open use",
-    "Restricted",
-    "Open use",
-    "Publicly Available"
-  ),
-  clean_last_data_update = c(
-    "January 2026", "December 2025", "November 2025", "October 2025", "January 2026"
-  ),
-  last_data_update     = as.Date(c(
-    "2026-01-01", "2025-12-01", "2025-11-01", "2025-10-01", "2026-01-01"
-  )),
-  stringsAsFactors = FALSE
-)
+source('demo-data.R')
 
 # ── Derived filter choices ────────────────────────────────────────────────────
 
@@ -105,7 +31,7 @@ tech_area_choices_br <- stringr::str_replace_all(tech_area_choices_br, "\n", "<b
 ui <- function(request) {
   dashboardPage(skin = 'black',
 
-    dashboardHeader(title = "Welcome to the Demo App", titleWidth = 350),
+    dashboardHeader(title = "Welcome to the Demo Dashboard", titleWidth = 350),
 
     dashboardSidebar(
       sidebarMenu(
@@ -230,6 +156,7 @@ ui <- function(request) {
                            'Report Name: A-Z' = 'name',
                            'Category'         = 'category'
                          ),
+                         choicesOpt = list(style = rep_len("color:black;", 3))
                        ))
               ),
               uiOutput('reportHeading'),
@@ -237,7 +164,7 @@ ui <- function(request) {
           )
         ),
 
-        # ── Demo Data Catalog Tab ───────────────────────────────────────────────
+        # ── Data Catalog Tab ───────────────────────────────────────────────
         tabItem(tabName = 'overview',
           fluidPage(
             fluidRow(
@@ -268,6 +195,9 @@ ui <- function(request) {
 # ── Server ────────────────────────────────────────────────────────────────────
 
 server <- function(input, output, session) {
+
+  # ── Dataset selection (for modal) ─────────────────────────────────────────
+  selection <- reactiveValues(name = NULL)
 
   # ── Filtered Data Reactives ───────────────────────────────────────────────
 
@@ -346,7 +276,7 @@ server <- function(input, output, session) {
       })
 
       # Insert category/featured headers when sorting by category or featured
-      if (input$order_results_reports %in% c('category')) {
+      if (input$order_results_reports %in% c('featured', 'category')) {
         category_counts <- filtered_reports() %>%
           dplyr::mutate(position = row_number()) %>%
           dplyr::group_by(!!dplyr::sym(input$order_results_reports)) %>%
@@ -421,8 +351,46 @@ server <- function(input, output, session) {
       data                  = data,
       row                   = rownum,
       tag_filter_list       = dataset_choices,
-      tech_area_filter_list = tech_area_input_choices
+      tech_area_filter_list = tech_area_input_choices,
+      selection             = selection
     )
+  })
+
+  # ── Dataset detail modal ──────────────────────────────────────────────────
+
+  observeEvent(selection$name, {
+    req(selection$name)
+    row <- data[data$name == selection$name, ]
+
+    assoc <- row$associated_reports
+    assoc_ui <- if (!is.na(assoc) && nchar(trimws(assoc)) > 0) {
+      report_names <- trimws(strsplit(assoc, ";")[[1]])
+      tags$ul(lapply(report_names, function(r) tags$li(r)))
+    } else {
+      p("None")
+    }
+
+    showModal(modalDialog(
+      title = row$name,
+      size  = "l",
+      easyClose = TRUE,
+      footer = modalButton("Close"),
+      h4("Description"),
+      p(row$full_description),
+      tags$hr(),
+      fluidRow(
+        column(6,
+          h4("Technical Area"),  p(row$technical_area),
+          h4("Last Updated"),    p(row$clean_last_data_update),
+          h4("Access"),          p(row$access_restrictions)
+        ),
+        column(6,
+          h4("Source"),             p(row$source),
+          h4("Unit of Analysis"),   p(row$unit_of_analysis),
+          h4("Associated Reports"), assoc_ui
+        )
+      )
+    ))
   })
 
   # ── Headings ──────────────────────────────────────────────────────────────
