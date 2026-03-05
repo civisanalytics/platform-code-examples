@@ -117,9 +117,11 @@ resultsCardUI <- function(id, input_data, rownum,
   tech_area_buttons = create_buttons(tech_area_list, tech_area_filter_list, ns)
 
   wellPanel(style = "background-color:white; color:black",
+    bsTooltip(id = ns('link_title'), title = 'Click to view full description',
+              placement = "right", trigger = 'hover', options = list(container = "body")),
     div(class = 'row results-header', style = 'padding-left:12px',
-        tags$span(input_data[rownum, "name"],
-                  style = 'margin-top:0px; text-decoration:underline; color:#046b99; font-weight:600; font-size:21px;')
+        actionLink(inputId = ns('link_title'), label = input_data[rownum, "name"],
+                   style = 'margin-top:0px; text-decoration:underline')
     ),
     div(class = 'row results-body',
         div(class = 'col-sm-8 results-body-main',
@@ -143,7 +145,8 @@ resultsCardUI <- function(id, input_data, rownum,
 
 
 resultsCardServer <- function(id, parent_session, data, row,
-                              tag_filter_list, tech_area_filter_list) {
+                              tag_filter_list, tech_area_filter_list,
+                              selection = NULL) {
 
   moduleServer(id, function(input, output, session) {
     tag_list <- data[row, 'tags'] %>% str_split(';') %>% unlist() %>% trimws('both')
@@ -151,6 +154,13 @@ resultsCardServer <- function(id, parent_session, data, row,
 
     update_input(input, tag_list, tag_filter_list, parent_session, 'dataset_choice')
     update_input(input, tech_area_list, tech_area_filter_list, parent_session, 'tech_area')
+
+    # When title is clicked, tell the parent which dataset was selected
+    if (!is.null(selection)) {
+      observeEvent(input$link_title, {
+        selection$name <- data[row, "name"]
+      })
+    }
   })
 }
 
