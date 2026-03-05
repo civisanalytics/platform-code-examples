@@ -37,9 +37,12 @@ ui <- function(request) {
       sidebarMenu(
         id = "tabs",
         div(class = 'sidebar-menu', id = "sidebar_nav",
-            menuItem("About",          tabName = "home"),
-            menuItem("Demo Reports", tabName = "reports", selected = TRUE),
-            menuItem("Demo Data Catalog",   tabName = "overview")
+            menuItem("About",             tabName = "home"),
+            menuItem("Demo Reports",      tabName = "reports", selected = TRUE),
+            menuItem("Demo Data Catalog", tabName = "overview"),
+            # Hidden — only reachable by clicking a dataset card
+            conditionalPanel("input.tabs == 'something'",
+                             menuItem("Data Details", tabName = "data_details"))
         ),
         div(class = 'sidebar-menu', id = 'sidebar_filters',
             conditionalPanel(
@@ -162,6 +165,12 @@ ui <- function(request) {
               uiOutput('reportHeading'),
               uiOutput('reports_page') %>% withSpinner(color = "#2474a4")
           )
+        ),
+
+        # ── Data Details Tab ───────────────────────────────────────────────
+        tabItem(tabName = 'data_details',
+          dataDetailsUI(id = 'data_details_tab',
+                        dataset_options = unique(data$name))
         ),
 
         # ── Data Catalog Tab ───────────────────────────────────────────────
@@ -347,10 +356,13 @@ server <- function(input, output, session) {
       parent_session        = session,
       data                  = data,
       row                   = rownum,
+      target_module         = 'data_details_tab',
       tag_filter_list       = dataset_choices,
       tech_area_filter_list = tech_area_input_choices
     )
   })
+
+  dataDetailsServer('data_details_tab', data = data)
 
   # ── Headings ──────────────────────────────────────────────────────────────
 
@@ -408,6 +420,10 @@ server <- function(input, output, session) {
   })
 
   observeEvent(input$data_go, {
+    updateTabItems(session, "tabs", "overview")
+  })
+
+  observeEvent(input$go_back_button, {
     updateTabItems(session, "tabs", "overview")
   })
 

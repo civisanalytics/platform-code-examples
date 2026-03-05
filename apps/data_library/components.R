@@ -1,7 +1,5 @@
 # Demo App - UI Components
 # Derived from apps/mdive_landing_page/components.R
-# Changes: removed civis dependency (get_org_admins), inlined 18f_custom_ui.R,
-# simplified boxButtonServer to always grant access (no access gate).
 
 # Inlined from style_files/18f_custom_ui.R
 actionButton18F <- function(..., theme = 'light') {
@@ -117,7 +115,7 @@ resultsCardUI <- function(id, input_data, rownum,
   tech_area_buttons = create_buttons(tech_area_list, tech_area_filter_list, ns)
 
   wellPanel(style = "background-color:white; color:black",
-    bsTooltip(id = ns('link_title'), title = 'Click to view full description',
+    bsTooltip(id = ns('link_title'), title = 'Click to view full description and data details',
               placement = "right", trigger = 'hover', options = list(container = "body")),
     div(class = 'row results-header', style = 'padding-left:12px',
         actionLink(inputId = ns('link_title'), label = input_data[rownum, "name"],
@@ -127,7 +125,7 @@ resultsCardUI <- function(id, input_data, rownum,
         div(class = 'col-sm-8 results-body-main',
             p(HTML(str_trunc(gsub("\n", "<br/>", input_data[rownum, "description"]),
                              width = 450,
-                             ellipsis = "...")))
+                             ellipsis = "...(<b>Click Dataset Name to See Full Description</b>)")))
         ),
         div(class = 'col-sm-4 results-body-side border-left',
             h4("Data Updated on:"),
@@ -144,8 +142,9 @@ resultsCardUI <- function(id, input_data, rownum,
 }
 
 
-resultsCardServer <- function(id, parent_session, data, row,
+resultsCardServer <- function(id, parent_session, data, row, target_module,
                               tag_filter_list, tech_area_filter_list) {
+  ns <- NS(target_module)
 
   moduleServer(id, function(input, output, session) {
     tag_list <- data[row, 'tags'] %>% str_split(';') %>% unlist() %>% trimws('both')
@@ -154,38 +153,11 @@ resultsCardServer <- function(id, parent_session, data, row,
     update_input(input, tag_list, tag_filter_list, parent_session, 'dataset_choice')
     update_input(input, tech_area_list, tech_area_filter_list, parent_session, 'tech_area')
 
+    table_selection <- reactive({ data[row, "name"] })
+
     observeEvent(input$link_title, {
-      r <- data[row, ]
-
-      assoc <- r$associated_reports
-      assoc_ui <- if (!is.na(assoc) && nchar(trimws(assoc)) > 0) {
-        report_names <- trimws(strsplit(assoc, ";")[[1]])
-        tags$ul(lapply(report_names, function(rn) tags$li(rn)))
-      } else {
-        p("None")
-      }
-
-      showModal(modalDialog(
-        title = r$name,
-        size  = "l",
-        easyClose = TRUE,
-        footer = modalButton("Close"),
-        h4("Description"),
-        p(r$full_description),
-        tags$hr(),
-        fluidRow(
-          column(6,
-            h4("Technical Area"),  p(r$technical_area),
-            h4("Last Updated"),    p(r$clean_last_data_update),
-            h4("Access"),          p(r$access_restrictions)
-          ),
-          column(6,
-            h4("Source"),             p(r$source),
-            h4("Unit of Analysis"),   p(r$unit_of_analysis),
-            h4("Associated Reports"), assoc_ui
-          )
-        )
-      ))
+      updateTabItems(session = parent_session, "tabs", "data_details")
+      updateSelectInput(session = parent_session, ns('dataset'), selected = table_selection())
     })
   })
 }
@@ -219,6 +191,59 @@ boxButtonUI <- function(id, box_link, description, tooltip_text, development_sta
     ),
     width = 12
   )
+}
+
+
+# ── Data Details Tab ──────────────────────────────────────────────────────────
+
+dataDetailsUI <- function(id, dataset_options) {
+  ns <- NS(id)
+  fluidPage(
+    fluidRow(
+      column(8, actionButton("go_back_button", "← Back to Data Catalog")),
+      column(4, selectInput(ns("dataset"), "Select dataset",
+                            choices = sort(dataset_options)))
+    ),
+    br(),
+    uiOutput(ns("details_content"))
+  )
+}
+
+dataDetailsServer <- function(id, data) {
+  moduleServer(id, function(input, output, session) {
+
+    output$details_content <- renderUI({
+      req(input$dataset)
+      r <- data[data$name == input$dataset, ]
+
+      assoc <- r$associated_reports
+      assoc_ui <- if (!is.na(assoc) && nchar(trimws(assoc)) > 0) {
+        report_names <- trimws(strsplit(assoc, ";")[[1]])
+        tags$ul(lapply(report_names, function(rn) tags$li(rn)))
+      } else {
+        p("None")
+      }
+
+      box(
+        width = 12, status = "primary",
+        h3(r$name),
+        p(HTML(gsub("\n", "<br/>", r$full_description))),
+        tags$hr(),
+        fluidRow(
+          column(6,
+            h4("Technical Area"),    p(r$technical_area),
+            h4("Last Updated"),      p(r$clean_last_data_update),
+            h4("Access Restrictions"), p(r$access_restrictions)
+          ),
+          column(6,
+            h4("Source"),             p(r$source),
+            h4("Unit of Analysis"),   p(r$unit_of_analysis),
+            h4("Associated Reports"), assoc_ui
+          )
+        )
+      )
+    })
+  })
 }
 
 
