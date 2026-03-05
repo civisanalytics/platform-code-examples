@@ -276,7 +276,7 @@ server <- function(input, output, session) {
       })
 
       # Insert category/featured headers when sorting by category or featured
-      if (input$order_results_reports %in% c('featured', 'category')) {
+      if (input$order_results_reports %in% c('category')) {
         category_counts <- filtered_reports() %>%
           dplyr::mutate(position = row_number()) %>%
           dplyr::group_by(!!dplyr::sym(input$order_results_reports)) %>%
