@@ -230,7 +230,6 @@ ui <- function(request) {
                            'Report Name: A-Z' = 'name',
                            'Category'         = 'category'
                          ),
-                         choicesOpt = list(style = rep_len("color:black;", 3))
                        ))
               ),
               uiOutput('reportHeading'),
