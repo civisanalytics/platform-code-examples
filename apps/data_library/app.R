@@ -196,9 +196,6 @@ ui <- function(request) {
 
 server <- function(input, output, session) {
 
-  # ── Dataset selection (for modal) ─────────────────────────────────────────
-  selection <- reactiveValues(name = NULL)
-
   # ── Filtered Data Reactives ───────────────────────────────────────────────
 
   filtered_data <- reactive({
@@ -276,7 +273,7 @@ server <- function(input, output, session) {
       })
 
       # Insert category/featured headers when sorting by category or featured
-      if (input$order_results_reports %in% c('category')) {
+      if (input$order_results_reports %in% c('featured', 'category')) {
         category_counts <- filtered_reports() %>%
           dplyr::mutate(position = row_number()) %>%
           dplyr::group_by(!!dplyr::sym(input$order_results_reports)) %>%
@@ -351,46 +348,8 @@ server <- function(input, output, session) {
       data                  = data,
       row                   = rownum,
       tag_filter_list       = dataset_choices,
-      tech_area_filter_list = tech_area_input_choices,
-      selection             = selection
+      tech_area_filter_list = tech_area_input_choices
     )
-  })
-
-  # ── Dataset detail modal ──────────────────────────────────────────────────
-
-  observeEvent(selection$name, {
-    req(selection$name)
-    row <- data[data$name == selection$name, ]
-
-    assoc <- row$associated_reports
-    assoc_ui <- if (!is.na(assoc) && nchar(trimws(assoc)) > 0) {
-      report_names <- trimws(strsplit(assoc, ";")[[1]])
-      tags$ul(lapply(report_names, function(r) tags$li(r)))
-    } else {
-      p("None")
-    }
-
-    showModal(modalDialog(
-      title = row$name,
-      size  = "l",
-      easyClose = TRUE,
-      footer = modalButton("Close"),
-      h4("Description"),
-      p(row$full_description),
-      tags$hr(),
-      fluidRow(
-        column(6,
-          h4("Technical Area"),  p(row$technical_area),
-          h4("Last Updated"),    p(row$clean_last_data_update),
-          h4("Access"),          p(row$access_restrictions)
-        ),
-        column(6,
-          h4("Source"),             p(row$source),
-          h4("Unit of Analysis"),   p(row$unit_of_analysis),
-          h4("Associated Reports"), assoc_ui
-        )
-      )
-    ))
   })
 
   # ── Headings ──────────────────────────────────────────────────────────────

@@ -1,5 +1,7 @@
 # Demo App - UI Components
 # Derived from apps/mdive_landing_page/components.R
+# Changes: removed civis dependency (get_org_admins), inlined 18f_custom_ui.R,
+# simplified boxButtonServer to always grant access (no access gate).
 
 # Inlined from style_files/18f_custom_ui.R
 actionButton18F <- function(..., theme = 'light') {
@@ -143,8 +145,7 @@ resultsCardUI <- function(id, input_data, rownum,
 
 
 resultsCardServer <- function(id, parent_session, data, row,
-                              tag_filter_list, tech_area_filter_list,
-                              selection = NULL) {
+                              tag_filter_list, tech_area_filter_list) {
 
   moduleServer(id, function(input, output, session) {
     tag_list <- data[row, 'tags'] %>% str_split(';') %>% unlist() %>% trimws('both')
@@ -153,12 +154,39 @@ resultsCardServer <- function(id, parent_session, data, row,
     update_input(input, tag_list, tag_filter_list, parent_session, 'dataset_choice')
     update_input(input, tech_area_list, tech_area_filter_list, parent_session, 'tech_area')
 
-    # When title is clicked, tell the parent which dataset was selected
-    if (!is.null(selection)) {
-      observeEvent(input$link_title, {
-        selection$name <- data[row, "name"]
-      })
-    }
+    observeEvent(input$link_title, {
+      r <- data[row, ]
+
+      assoc <- r$associated_reports
+      assoc_ui <- if (!is.na(assoc) && nchar(trimws(assoc)) > 0) {
+        report_names <- trimws(strsplit(assoc, ";")[[1]])
+        tags$ul(lapply(report_names, function(rn) tags$li(rn)))
+      } else {
+        p("None")
+      }
+
+      showModal(modalDialog(
+        title = r$name,
+        size  = "l",
+        easyClose = TRUE,
+        footer = modalButton("Close"),
+        h4("Description"),
+        p(r$full_description),
+        tags$hr(),
+        fluidRow(
+          column(6,
+            h4("Technical Area"),  p(r$technical_area),
+            h4("Last Updated"),    p(r$clean_last_data_update),
+            h4("Access"),          p(r$access_restrictions)
+          ),
+          column(6,
+            h4("Source"),             p(r$source),
+            h4("Unit of Analysis"),   p(r$unit_of_analysis),
+            h4("Associated Reports"), assoc_ui
+          )
+        )
+      ))
+    })
   })
 }
 
