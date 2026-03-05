@@ -362,7 +362,7 @@ server <- function(input, output, session) {
     )
   })
 
-  dataDetailsServer('data_details_tab', data = data)
+  dataDetailsServer('data_details_tab', data = data, reports_data = reports_data)
 
   # ── Headings ──────────────────────────────────────────────────────────────
 

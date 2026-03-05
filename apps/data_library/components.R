@@ -209,17 +209,26 @@ dataDetailsUI <- function(id, dataset_options) {
   )
 }
 
-dataDetailsServer <- function(id, data) {
+dataDetailsServer <- function(id, data, reports_data) {
   moduleServer(id, function(input, output, session) {
 
     output$details_content <- renderUI({
       req(input$dataset)
       r <- data[data$name == input$dataset, ]
+      req(nrow(r) > 0)
 
-      assoc <- r$associated_reports
-      assoc_ui <- if (!is.na(assoc) && nchar(trimws(assoc)) > 0) {
+      assoc <- r$associated_reports[1]
+      has_assoc <- length(assoc) == 1 && !is.na(assoc) && nchar(trimws(assoc)) > 0
+      assoc_ui <- if (has_assoc) {
         report_names <- trimws(strsplit(assoc, ";")[[1]])
-        tags$ul(lapply(report_names, function(rn) tags$li(rn)))
+        tags$ul(lapply(report_names, function(rn) {
+          report_row <- reports_data[reports_data$name == rn, ]
+          if (nrow(report_row) > 0) {
+            tags$li(tags$a(href = report_row$location_link[1], rn, target = "_blank"))
+          } else {
+            tags$li(rn)
+          }
+        }))
       } else {
         p("None")
       }
