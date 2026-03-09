@@ -17,7 +17,7 @@ The script performs the following operations:
 Create a metadata table in your Civis database with the following structure:
 
 ```sql
-CREATE TABLE your_database.your_schema.metadata_data_upload_mmk (
+CREATE TABLE your_database.your_schema.metadata_data_upload(
     primary_group_id INTEGER,
     schema_name VARCHAR
 );
@@ -26,7 +26,7 @@ CREATE TABLE your_database.your_schema.metadata_data_upload_mmk (
 Populate this table with mappings of primary group IDs to their corresponding schemas:
 
 ```sql
-INSERT INTO your_database.your_schema.metadata_data_upload_mmk 
+INSERT INTO your_database.your_schema.metadata_data_upload
 VALUES 
     (123, 'team_a_schema'),
     (456, 'team_b_schema'),
@@ -46,7 +46,7 @@ cd /app;
 export DATABASE='redshift-general'
 export TESTING=0
 export EMAIL=""
-export METADATA_TABLE="metadata_data_upload_mmk"
+export METADATA_TABLE="metadata_data_upload"
 export EMAIL_SCRIPT_ID="340695845"
 python python/custom_file_uploads/generic_upload.py
 ```
@@ -87,13 +87,13 @@ Here's a complete example for setting up your metadata table:
 
 ```sql
 -- Create the metadata table
-CREATE TABLE your_database.your_schema.metadata_data_upload_mmk (
+CREATE TABLE your_database.your_schema.metadata_data_upload (
     primary_group_id INTEGER,
     schema_name VARCHAR
 );
 
 -- Add your group mappings
-INSERT INTO your_database.your_schema.metadata_data_upload_mmk 
+INSERT INTO your_database.your_schema.metadata_data_upload
     (primary_group_id, schema_name)
 VALUES 
     (123, 'analytics_team'),
