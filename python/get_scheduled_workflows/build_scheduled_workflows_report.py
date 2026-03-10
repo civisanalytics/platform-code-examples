@@ -139,8 +139,8 @@ def build_html(calendar_events, everyday_cards_html, job_id):
         it runs, which avoids the calendar rendering before its container
         has dimensions.
     -->
-    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet" />  # noqa: E501
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet" />  # noqa: E501
+    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet" />
 
     <style>
         *, *::before, *::after {{ box-sizing: border-box; }}
