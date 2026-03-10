@@ -1,5 +1,6 @@
 import civis
 import calendar
+import html as html_lib
 import os
 from datetime import datetime, timedelta
 import json
@@ -8,6 +9,7 @@ import json
 # Civis API client
 # ---------------------------------------------------------------------------
 client = civis.APIClient()
+
 
 # ---------------------------------------------------------------------------
 # Fetch all workflows (paginated)
@@ -22,34 +24,36 @@ def fetch_all_workflows(client):
         page += 1
     return workflows
 
+
 # ---------------------------------------------------------------------------
 # Parse schedule into a human-readable string
 # ---------------------------------------------------------------------------
 def schedule_to_string(ws):
-    DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
     parts = []
-    days          = ws.get('scheduled_days', [])
-    hours         = ws.get('scheduled_hours', [])
-    minutes       = ws.get('scheduled_minutes', [])
-    days_of_month = ws.get('scheduled_days_of_month', [])
+    days = ws.get("scheduled_days", [])
+    hours = ws.get("scheduled_hours", [])
+    minutes = ws.get("scheduled_minutes", [])
+    days_of_month = ws.get("scheduled_days_of_month", [])
 
     if days:
-        parts.append("Days: " + ', '.join(DAY_NAMES[d] for d in days if 0 <= d <= 6))
+        parts.append("Days: " + ", ".join(DAY_NAMES[d] for d in days if 0 <= d <= 6))
     if days_of_month:
-        parts.append("Days of month: " + ', '.join(str(d) for d in days_of_month))
-    if hours:
-        parts.append("Hours (UTC): " + ', '.join(str(h) for h in hours))
-    if minutes:
-        parts.append("Minutes: " + ', '.join(str(m) for m in minutes))
-    return '; '.join(parts) if parts else 'N/A'
+        parts.append("Days of month: " + ", ".join(str(d) for d in days_of_month))
+    if hours or minutes:
+        h_list = hours or [0]
+        m_list = minutes or [0]
+        times = [f"{h}:{m:02d}" for h in h_list for m in m_list]
+        parts.append("Time (UTC): " + ", ".join(times))
+    return "; ".join(parts) if parts else "N/A"
+
 
 # ---------------------------------------------------------------------------
 # Build calendar events for FullCalendar
 # ---------------------------------------------------------------------------
 def build_calendar_events(workflows, year, month):
     month_days = [
-        d for d in calendar.Calendar().itermonthdates(year, month)
-        if d.month == month
+        d for d in calendar.Calendar().itermonthdates(year, month) if d.month == month
     ]
     events = []
     for ws in workflows:
@@ -61,42 +65,44 @@ def build_calendar_events(workflows, year, month):
             f"<b>Time zone:</b> {ws.get('time_zone') or 'UTC'}<br/>"
             f"<b>Created:</b> {ws.get('created_at', '')}<br/>"
             f"<b>Next run:</b> {ws.get('next_execution_at', '')}<br/>"
-            f"<a href='{workflow_url}' target='_blank'>Open in Civis →</a>"
         )
-        scheduled_days = ws.get('scheduled_days', [])
-        days_of_month  = ws.get('scheduled_days_of_month', [])
-        hours          = ws.get('scheduled_hours') or [0]
-        minutes        = ws.get('scheduled_minutes') or [0]
+        scheduled_days = ws.get("scheduled_days", [])
+        days_of_month = ws.get("scheduled_days_of_month", [])
+        hours = ws.get("scheduled_hours") or [0]
+        minutes = ws.get("scheduled_minutes") or [0]
 
         if scheduled_days:
             for day in month_days:
                 civis_weekday = (day.weekday() + 1) % 7  # Civis: 0=Sun
                 if civis_weekday in scheduled_days:
-                    for h in hours:
-                        for m in minutes:
-                            event_time = datetime.combine(day, datetime.min.time()) + timedelta(hours=h, minutes=m)
-                            events.append({
-                                'title': ws['name'],
-                                'start': event_time.strftime('%Y-%m-%dT%H:%M:%S'),
-                                'description': tooltip,
-                                'url': workflow_url,
-                            })
+                    first_time = datetime.combine(day, datetime.min.time()) + timedelta(
+                        hours=hours[0], minutes=minutes[0]
+                    )
+                    events.append(
+                        {
+                            "title": ws["name"],
+                            "start": first_time.strftime("%Y-%m-%dT%H:%M:%S"),
+                            "description": tooltip,
+                            "url": workflow_url,
+                        }
+                    )
         elif days_of_month:
             for dom in days_of_month:
                 try:
                     event_date = datetime(year, month, dom)
                 except ValueError:
                     continue
-                for h in hours:
-                    for m in minutes:
-                        event_time = event_date + timedelta(hours=h, minutes=m)
-                        events.append({
-                            'title': ws['name'],
-                            'start': event_time.strftime('%Y-%m-%dT%H:%M:%S'),
-                            'description': tooltip,
-                            'url': workflow_url,
-                        })
+                first_time = event_date + timedelta(hours=hours[0], minutes=minutes[0])
+                events.append(
+                    {
+                        "title": ws["name"],
+                        "start": first_time.strftime("%Y-%m-%dT%H:%M:%S"),
+                        "description": tooltip,
+                        "url": workflow_url,
+                    }
+                )
     return events
+
 
 # ---------------------------------------------------------------------------
 # Build everyday workflow cards HTML
@@ -106,13 +112,14 @@ def build_everyday_cards(everyday_workflows):
     for ws in everyday_workflows:
         workflow_url = f"https://platform.civisanalytics.com/spa/#/workflows/{ws['id']}"
         cards.append(
-            f"<div class='workflow-card' data-wfname=\"{ws['name'].lower()}\">"
+            f"<div class='workflow-card' data-wfname=\"{html_lib.escape(ws['name'].lower())}\">"
             f"  <div><b>Name:</b> <a href='{workflow_url}' target='_blank'>{ws['name']}</a></div>"
             f"  <div class='workflow-meta'><b>Schedule:</b> {schedule_to_string(ws)}</div>"
             f"  <div class='workflow-meta'><b>Created:</b> {ws.get('created_at', '')}</div>"
             f"</div>"
         )
-    return '\n'.join(cards)
+    return "\n".join(cards)
+
 
 # ---------------------------------------------------------------------------
 # Build the full HTML report
@@ -128,11 +135,12 @@ def build_html(calendar_events, everyday_cards_html, job_id):
 
     <!--
         CSS loads first to prevent flash of unstyled content.
-        FullCalendar JS is deferred to end of <body> so the DOM is ready when it runs,
-        which avoids the calendar rendering before its container has dimensions.
+        FullCalendar JS is deferred to end of <body> so the DOM is ready when
+        it runs, which avoids the calendar rendering before its container
+        has dimensions.
     -->
-    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet" />
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet" />  # noqa: E501
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet" />  # noqa: E501
 
     <style>
         *, *::before, *::after {{ box-sizing: border-box; }}
@@ -194,7 +202,7 @@ def build_html(calendar_events, everyday_cards_html, job_id):
         }}
         .fc-event {{ cursor: pointer; }}
 
-        /* Tooltip — uses position:fixed to avoid scroll-offset bugs */
+        /* Tooltip - uses position:fixed to avoid scroll-offset bugs */
         .wf-tooltip {{
             position: fixed;
             background: #fff;
@@ -282,19 +290,23 @@ def build_html(calendar_events, everyday_cards_html, job_id):
 </head>
 <body>
 
-<h1>Civis Workflow Schedules Calendar</h1>
+<h1>Scheduled Workflows</h1>
 
 <div id="explanation">
     <b>What's in this report?</b><br>
-    The calendar shows all non-archived, scheduled Civis workflows that run on specific days of
-    the week or month. Workflows scheduled to run <em>every</em> day are listed separately below
-    the calendar. Use the search box to filter by name in both views.<br><br>
+    The calendar shows all non-archived, scheduled Civis workflows that run
+    on specific days of the week or month. Workflows scheduled to run
+    <em>every</em> day are listed separately below the calendar. Use
+     the search box to filter by name in both views and click on any
+     workflow name to navigate to it in platform.<br><br>
     <b>Refreshing this report:</b>
-    Navigate to <a href="https://platform.civisanalytics.com/spa/#/scripts/python3/{job_id}" target="_blank">this script</a>
+    Navigate to
+     <a href="https://platform.civisanalytics.com/spa/#/scripts/python3/{job_id}"
+      target="_blank">this script</a>
     and click the blue <b>Run</b> button.
 </div>
 
-<input type="text" id="search-box" placeholder="Search workflows by name…" />
+<input type="text" id="search-box" placeholder="Search workflows by name..." />
 
 <div id="calendar"></div>
 
@@ -352,7 +364,9 @@ def build_html(calendar_events, everyday_cards_html, job_id):
             (arg.allSegs || []).forEach(function (seg) {{
                 var ev   = seg.event;
                 var desc = (ev.extendedProps && ev.extendedProps.description) || '';
-                body += '<li><b>' + ev.title + '</b><br><span style="font-size:0.95em">' + desc + '</span></li>';
+                body += '<li><b>' + ev.title
+                      + '</b><br><span style="font-size:0.95em">' + desc
+                      + '</span></li>';
             }});
             body += '</ul><span class="close-btn" id="modal-close">&times;</span>';
 
@@ -360,8 +374,10 @@ def build_html(calendar_events, everyday_cards_html, job_id):
             var content = document.getElementById('event-modal-content');
             content.innerHTML = body;
             modal.style.display = 'block';
-            document.getElementById('modal-close').onclick = function () {{ modal.style.display = 'none'; }};
-            modal.onclick = function (e) {{ if (e.target === modal) modal.style.display = 'none'; }};
+            document.getElementById('modal-close').onclick = function ()
+            {{ modal.style.display = 'none'; }};
+            modal.onclick = function (e) {{ if (e.target === modal)
+            modal.style.display = 'none'; }};
             return false;
         }}
     }});
@@ -373,65 +389,70 @@ def build_html(calendar_events, everyday_cards_html, job_id):
 
     searchBox.addEventListener('input', function () {{
         var q = searchBox.value.trim().toLowerCase();
-        cal.getEvents().forEach(function (ev) {{ ev.remove(); }});
-        ALL_EVENTS.forEach(function (ev) {{
-            if (ev.title.toLowerCase().includes(q)) cal.addEvent(ev);
+        cal.batchRendering(function () {{
+            cal.getEvents().forEach(function (ev) {{ ev.remove(); }});
+            ALL_EVENTS.forEach(function (ev) {{
+                if (ev.title.toLowerCase().includes(q)) cal.addEvent(ev);
+            }});
         }});
         everydayCards.forEach(function (card) {{
             card.style.display = card.dataset.wfname.includes(q) ? '' : 'none';
         }});
     }});
-}());
+}}());
 </script>
 
 </body>
 </html>"""
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
+
 all_workflows = fetch_all_workflows(client)
 
 active_scheduled = [
-    wf for wf in all_workflows
-    if not wf.get('archived', False)
-    and wf.get('schedule', {}).get('scheduled', False)
-][:100]
+    wf
+    for wf in all_workflows
+    if not wf.get("archived", False) and wf.get("schedule", {}).get("scheduled", False)
+]
 
 workflow_schedules = []
 for wf in active_scheduled:
-    sched = wf.get('schedule', {})
-    workflow_schedules.append({
-        'id':                      wf['id'],
-        'name':                    wf['name'],
-        'scheduled':               sched.get('scheduled', False),
-        'scheduled_days':          sched.get('scheduled_days', []),
-        'scheduled_hours':         sched.get('scheduled_hours', []),
-        'scheduled_minutes':       sched.get('scheduled_minutes', []),
-        'scheduled_days_of_month': sched.get('scheduled_days_of_month', []),
-        'created_at':              wf.get('created_at', ''),
-        'next_execution_at':       wf.get('next_execution_at', ''),
-        'time_zone':               wf.get('time_zone', ''),
-    })
+    sched = wf.get("schedule", {})
+    workflow_schedules.append(
+        {
+            "id": wf["id"],
+            "name": wf["name"],
+            "scheduled": sched.get("scheduled", False),
+            "scheduled_days": sched.get("scheduled_days", []),
+            "scheduled_hours": sched.get("scheduled_hours", []),
+            "scheduled_minutes": sched.get("scheduled_minutes", []),
+            "scheduled_days_of_month": sched.get("scheduled_days_of_month", []),
+            "created_at": wf.get("created_at", ""),
+            "next_execution_at": wf.get("next_execution_at", ""),
+            "time_zone": wf.get("time_zone", ""),
+        }
+    )
 
-everyday_workflows = [ws for ws in workflow_schedules if sorted(ws['scheduled_days']) == list(range(7))]
-main_workflows     = [ws for ws in workflow_schedules if sorted(ws['scheduled_days']) != list(range(7))]
+everyday_workflows = [
+    ws for ws in workflow_schedules if sorted(ws["scheduled_days"]) == list(range(7))
+]
+main_workflows = [
+    ws for ws in workflow_schedules if sorted(ws["scheduled_days"]) != list(range(7))
+]
 
-now   = datetime.utcnow()
-year  = now.year
+now = datetime.utcnow()
+year = now.year
 month = now.month
 
-calendar_events     = build_calendar_events(main_workflows, year, month)
+calendar_events = build_calendar_events(main_workflows, year, month)
 everyday_cards_html = build_everyday_cards(everyday_workflows)
-job_id              = os.environ.get("CIVIS_JOB_ID", "")
-html                = build_html(calendar_events, everyday_cards_html, job_id)
+job_id = os.environ.get("CIVIS_JOB_ID", "")
+html = build_html(calendar_events, everyday_cards_html, job_id)
 
-with open("workflow_schedules_report.html", "w") as f:
-    f.write(html)
-
-report_name        = "Civis Workflow Schedules Calendar"
-report_description = "Interactive calendar of non-archived Civis workflows and their schedules."
-report_id          = os.environ.get("REPORT_ID")
+report_name = "Scheduled Workflows"
+report_description = (
+    "Interactive calendar of non-archived Civis workflows and their schedules."
+)
+report_id = os.environ.get("REPORT_ID")
 
 if report_id:
     report = client.reports.patch(
@@ -448,8 +469,7 @@ else:
     )
     client.scripts.patch_python3(
         id=int(os.environ["CIVIS_JOB_ID"]),
+        params=[{"name": "REPORT_ID", "type": "string", "required": False}],
         arguments={"REPORT_ID": int(report.id)},
     )
-
-print(f"Report saved locally: workflow_schedules_report.html")
 print(f"Civis report ID: {report['id']}")
