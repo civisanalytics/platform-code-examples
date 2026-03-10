@@ -65,6 +65,7 @@ def build_calendar_events(workflows, year, month):
             f"<b>Time zone:</b> {ws.get('time_zone') or 'UTC'}<br/>"
             f"<b>Created:</b> {ws.get('created_at', '')}<br/>"
             f"<b>Next run:</b> {ws.get('next_execution_at', '')}<br/>"
+            f"<b>State:</b> {ws.get('state', '')}<br/>"
         )
         scheduled_days = ws.get("scheduled_days", [])
         days_of_month = ws.get("scheduled_days_of_month", [])
@@ -429,6 +430,7 @@ for wf in active_scheduled:
             "created_at": wf.get("created_at", ""),
             "next_execution_at": wf.get("next_execution_at", ""),
             "time_zone": wf.get("time_zone", ""),
+            "state": wf.get("state", ""),
         }
     )
 
