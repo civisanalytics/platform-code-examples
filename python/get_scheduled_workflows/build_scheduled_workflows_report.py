@@ -99,15 +99,26 @@ def event_time_pairs(ws):
 
 
 def workflow_event_metadata(ws):
+    workflow_url = f"https://platform.civisanalytics.com/spa/#/workflows/{ws['id']}"
     return {
         "workflowId": ws["id"],
-        "workflowUrl": f"https://platform.civisanalytics.com/spa/#/workflows/{ws['id']}",
+        "workflowUrl": workflow_url,
+        "url": workflow_url,
         "scheduleText": schedule_to_string(ws),
         "timeZone": ws.get("time_zone", "UTC"),
         "createdAt": ws.get("created_at", ""),
         "nextExecutionAt": ws.get("next_execution_at", ""),
         "state": ws.get("state", ""),
     }
+
+
+def workflow_event_color(ws):
+    state = str(ws.get("state", "")).strip().lower()
+    if state == "failed":
+        return "#c0392b"
+    if state in {"succeeded", "success"}:
+        return "#1f7a3d"
+    return "#20639b"
 
 
 # ---------------------------------------------------------------------------
@@ -142,6 +153,7 @@ def build_calendar_events(workflows, year, month):
                             {
                                 "title": ws["name"],
                                 "start": event_time.isoformat(),
+                                "color": workflow_event_color(ws),
                                 **event_metadata,
                             }
                         )
@@ -157,6 +169,7 @@ def build_calendar_events(workflows, year, month):
                         {
                             "title": ws["name"],
                             "start": event_time.isoformat(),
+                            "color": workflow_event_color(ws),
                             **event_metadata,
                         }
                     )
@@ -409,6 +422,13 @@ def build_client_script(calendar_time_zone="local"):
         height: 'auto',
         events: ALL_EVENTS,
         dayMaxEvents: true,
+
+        eventClick: function (info) {{
+            var workflowUrl = safeExternalUrl(info.event.url || info.event.extendedProps.workflowUrl);
+            if (!workflowUrl) return;
+            info.jsEvent.preventDefault();
+            window.open(workflowUrl, '_blank', 'noopener');
+        }},
 
         eventDidMount: function (info) {{
             info.el.addEventListener('mouseenter', function (e) {{ showTooltip(e, info.event); }});
