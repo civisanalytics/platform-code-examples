@@ -98,7 +98,184 @@ def event_time_pairs(ws):
     return [(hour, minute) for hour in hours for minute in minutes]
 
 
-def workflow_event_metadata(ws):
+def parse_api_datetime(value):
+    if not value:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    parsed = datetime.fromisoformat(text)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def normalize_execution_state(execution):
+    state = str(execution.get("state") or execution.get("mistral_state") or "").strip().lower()
+    if state in {"failed", "error"}:
+        return "failed"
+    if state in {"succeeded", "success"}:
+        return "succeeded"
+    if state in {"cancelled", "canceled"}:
+        return "cancelled"
+    if state in {"queued", "running", "paused"}:
+        return state
+    return "scheduled"
+
+
+def execution_reference_time(execution):
+    for key in ("started_at", "created_at", "finished_at"):
+        timestamp = parse_api_datetime(execution.get(key))
+        if timestamp is not None:
+            return timestamp
+    return None
+
+
+def normalize_execution(execution):
+    return {
+        "id": execution.get("id"),
+        "state": normalize_execution_state(execution),
+        "reference_at": execution_reference_time(execution),
+        "started_at": str(execution.get("started_at", "") or ""),
+        "finished_at": str(execution.get("finished_at", "") or ""),
+        "created_at": str(execution.get("created_at", "") or ""),
+    }
+
+
+def workflow_occurrence_times(ws, year, month):
+    month_days = [
+        d for d in calendar.Calendar().itermonthdates(year, month) if d.month == month
+    ]
+    tzinfo = get_workflow_zoneinfo(ws)
+    scheduled_days = set(ws.get("scheduled_days", []))
+    days_of_month = ws.get("scheduled_days_of_month", [])
+    occurrences = []
+
+    if scheduled_days:
+        for day in month_days:
+            civis_weekday = (day.weekday() + 1) % 7  # Civis: 0=Sun
+            if civis_weekday in scheduled_days:
+                for hour, minute in event_time_pairs(ws):
+                    occurrences.append(
+                        datetime(
+                            day.year,
+                            day.month,
+                            day.day,
+                            hour,
+                            minute,
+                            tzinfo=tzinfo,
+                        )
+                    )
+    elif days_of_month:
+        for dom in days_of_month:
+            try:
+                event_date = datetime(year, month, dom, tzinfo=tzinfo)
+            except ValueError:
+                continue
+            for hour, minute in event_time_pairs(ws):
+                occurrences.append(event_date + timedelta(hours=hour, minutes=minute))
+
+    return sorted(occurrences)
+
+
+def workflow_execution_fetch_window(occurrence_times):
+    if not occurrence_times:
+        return None, None
+    start_utc = occurrence_times[0].astimezone(timezone.utc) - timedelta(minutes=30)
+    end_utc = occurrence_times[-1].astimezone(timezone.utc) + timedelta(days=2)
+    return start_utc, end_utc
+
+
+def fetch_workflow_executions(client, workflow_id, window_start_utc, window_end_utc):
+    if window_start_utc is None or window_end_utc is None:
+        return []
+
+    executions = []
+    page_num = 1
+    limit = 50
+    while True:
+        page = client.workflows.list_executions(
+            workflow_id,
+            limit=limit,
+            page_num=page_num,
+            order="created_at",
+            order_dir="desc",
+        )
+        if not page:
+            break
+
+        oldest_in_page = None
+        for execution in page:
+            normalized = normalize_execution(execution)
+            reference_at = normalized["reference_at"]
+            created_at = parse_api_datetime(normalized["created_at"])
+            if created_at is not None and (
+                oldest_in_page is None or created_at < oldest_in_page
+            ):
+                oldest_in_page = created_at
+            if reference_at is None:
+                continue
+            if reference_at < window_start_utc or reference_at >= window_end_utc:
+                continue
+            executions.append(normalized)
+
+        if len(page) < limit:
+            break
+        if oldest_in_page is not None and oldest_in_page < window_start_utc:
+            break
+        page_num += 1
+
+    return executions
+
+
+def execution_state_color(state):
+    normalized_state = str(state or "").strip().lower()
+    if normalized_state == "failed":
+        return "#c0392b"
+    if normalized_state == "succeeded":
+        return "#1f7a3d"
+    if normalized_state in {"running", "queued", "paused"}:
+        return "#d97706"
+    if normalized_state == "cancelled":
+        return "#6b7280"
+    return "#20639b"
+
+
+def match_executions_to_occurrences(occurrence_times, executions, now_utc):
+    matched = [None] * len(occurrence_times)
+    occurrence_times_utc = [occurrence.astimezone(timezone.utc) for occurrence in occurrence_times]
+    grace_period = timedelta(minutes=30)
+
+    for execution in sorted(executions, key=lambda item: item["reference_at"] or datetime.min.replace(tzinfo=timezone.utc)):
+        reference_at = execution.get("reference_at")
+        if reference_at is None:
+            continue
+        target_index = -1
+        for index, occurrence_utc in enumerate(occurrence_times_utc):
+            if occurrence_utc <= reference_at + grace_period:
+                target_index = index
+            else:
+                break
+        if target_index < 0:
+            continue
+
+        next_occurrence_utc = (
+            occurrence_times_utc[target_index + 1]
+            if target_index + 1 < len(occurrence_times_utc)
+            else occurrence_times_utc[target_index] + timedelta(days=2)
+        )
+        if reference_at >= next_occurrence_utc:
+            continue
+        if occurrence_times_utc[target_index] > now_utc:
+            continue
+        matched[target_index] = execution
+
+    return matched
+
+
+def workflow_event_metadata(ws, event_state, matched_execution):
     workflow_url = f"https://platform.civisanalytics.com/spa/#/workflows/{ws['id']}"
     return {
         "workflowId": ws["id"],
@@ -108,71 +285,46 @@ def workflow_event_metadata(ws):
         "timeZone": ws.get("time_zone", "UTC"),
         "createdAt": ws.get("created_at", ""),
         "nextExecutionAt": ws.get("next_execution_at", ""),
-        "state": ws.get("state", ""),
+        "state": event_state,
+        "matchedExecutionStartedAt": (
+            matched_execution.get("started_at", "") if matched_execution else ""
+        ),
+        "matchedExecutionFinishedAt": (
+            matched_execution.get("finished_at", "") if matched_execution else ""
+        ),
     }
-
-
-def workflow_event_color(ws):
-    state = str(ws.get("state", "")).strip().lower()
-    if state == "failed":
-        return "#c0392b"
-    if state in {"succeeded", "success"}:
-        return "#1f7a3d"
-    return "#20639b"
 
 
 # ---------------------------------------------------------------------------
 # Build calendar events for FullCalendar
 # ---------------------------------------------------------------------------
-def build_calendar_events(workflows, year, month):
-    month_days = [
-        d for d in calendar.Calendar().itermonthdates(year, month) if d.month == month
-    ]
+def build_calendar_events(workflows, year, month, workflow_executions=None, now_utc=None):
+    workflow_executions = workflow_executions or {}
+    now_utc = now_utc or datetime.now(timezone.utc)
     events = []
     for ws in workflows:
-        tzinfo = get_workflow_zoneinfo(ws)
-        scheduled_days = set(ws.get("scheduled_days", []))
-        days_of_month = ws.get("scheduled_days_of_month", [])
-        time_pairs = event_time_pairs(ws)
-        event_metadata = workflow_event_metadata(ws)
+        occurrence_times = workflow_occurrence_times(ws, year, month)
+        matched_executions = match_executions_to_occurrences(
+            occurrence_times,
+            workflow_executions.get(ws["id"], []),
+            now_utc,
+        )
 
-        if scheduled_days:
-            for day in month_days:
-                civis_weekday = (day.weekday() + 1) % 7  # Civis: 0=Sun
-                if civis_weekday in scheduled_days:
-                    for hour, minute in time_pairs:
-                        event_time = datetime(
-                            day.year,
-                            day.month,
-                            day.day,
-                            hour,
-                            minute,
-                            tzinfo=tzinfo,
-                        )
-                        events.append(
-                            {
-                                "title": ws["name"],
-                                "start": event_time.isoformat(),
-                                "color": workflow_event_color(ws),
-                                **event_metadata,
-                            }
-                        )
-        elif days_of_month:
-            for dom in days_of_month:
-                try:
-                    event_date = datetime(year, month, dom, tzinfo=tzinfo)
-                except ValueError:
-                    continue
-                for hour, minute in time_pairs:
-                    event_time = event_date + timedelta(hours=hour, minutes=minute)
-                    events.append(
-                        {
-                            "title": ws["name"],
-                            "start": event_time.isoformat(),
-                            "color": workflow_event_color(ws),
-                            **event_metadata,
-                        }
-                    )
+        for occurrence_time, matched_execution in zip(occurrence_times, matched_executions):
+            occurrence_time_utc = occurrence_time.astimezone(timezone.utc)
+            event_state = (
+                matched_execution["state"]
+                if matched_execution is not None and occurrence_time_utc <= now_utc
+                else "scheduled"
+            )
+            events.append(
+                {
+                    "title": ws["name"],
+                    "start": occurrence_time.isoformat(),
+                    "color": execution_state_color(event_state),
+                    **workflow_event_metadata(ws, event_state, matched_execution),
+                }
+            )
     return events
 
 
@@ -385,8 +537,7 @@ def build_client_script(calendar_time_zone="local"):
         var linkedTitle = workflowUrl
             ? "<a href='" + escapeHtml(workflowUrl) + "' target='_blank' rel='noopener noreferrer'>" + title + "</a>"
             : title;
-
-        return [
+        var lines = [
             '<b>Name:</b> ' + linkedTitle,
             '<b>Workflow ID:</b> ' + escapeHtml(props.workflowId),
             '<b>Schedule:</b> ' + escapeHtml(props.scheduleText),
@@ -394,7 +545,16 @@ def build_client_script(calendar_time_zone="local"):
             '<b>Created:</b> ' + escapeHtml(props.createdAt),
             '<b>Next run:</b> ' + escapeHtml(props.nextExecutionAt),
             '<b>State:</b> ' + escapeHtml(props.state)
-        ].join('<br/>');
+        ];
+
+        if (props.matchedExecutionStartedAt) {{
+            lines.push('<b>Matched run started:</b> ' + escapeHtml(props.matchedExecutionStartedAt));
+        }}
+        if (props.matchedExecutionFinishedAt) {{
+            lines.push('<b>Matched run finished:</b> ' + escapeHtml(props.matchedExecutionFinishedAt));
+        }}
+
+        return lines.join('<br/>');
     }}
 
     function showTooltip(e, event) {{
@@ -571,7 +731,26 @@ def main():
     year = now.year
     month = now.month
 
-    calendar_events = build_calendar_events(main_workflows, year, month)
+    workflow_executions = {}
+    for workflow in main_workflows:
+        occurrence_times = workflow_occurrence_times(workflow, year, month)
+        window_start_utc, window_end_utc = workflow_execution_fetch_window(
+            occurrence_times
+        )
+        workflow_executions[workflow["id"]] = fetch_workflow_executions(
+            client,
+            workflow["id"],
+            window_start_utc,
+            window_end_utc,
+        )
+
+    calendar_events = build_calendar_events(
+        main_workflows,
+        year,
+        month,
+        workflow_executions=workflow_executions,
+        now_utc=now,
+    )
     everyday_cards_html = build_everyday_cards(everyday_workflows)
     job_id = os.environ.get("CIVIS_JOB_ID", "")
     html = build_html(calendar_events, everyday_cards_html, job_id)
