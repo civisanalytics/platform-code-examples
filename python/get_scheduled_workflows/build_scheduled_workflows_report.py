@@ -58,14 +58,24 @@ def build_calendar_events(workflows, year, month):
     events = []
     for ws in workflows:
         workflow_url = f"https://platform.civisanalytics.com/spa/#/workflows/{ws['id']}"
+        escaped_workflow_url = html_lib.escape(workflow_url, quote=True)
+        escaped_name = html_lib.escape(str(ws.get("name", "")), quote=True)
+        escaped_workflow_id = html_lib.escape(str(ws.get("id", "")), quote=True)
+        escaped_schedule = html_lib.escape(schedule_to_string(ws), quote=True)
+        escaped_time_zone = html_lib.escape(str(ws.get("time_zone") or "UTC"), quote=True)
+        escaped_created_at = html_lib.escape(str(ws.get("created_at", "")), quote=True)
+        escaped_next_execution_at = html_lib.escape(
+            str(ws.get("next_execution_at", "")), quote=True
+        )
+        escaped_state = html_lib.escape(str(ws.get("state", "")), quote=True)
         tooltip = (
-            f"<b>Name:</b> <a href='{workflow_url}' target='_blank'>{ws['name']}</a><br/>"
-            f"<b>Workflow ID:</b> {ws['id']}<br/>"
-            f"<b>Schedule:</b> {schedule_to_string(ws)}<br/>"
-            f"<b>Time zone:</b> {ws.get('time_zone') or 'UTC'}<br/>"
-            f"<b>Created:</b> {ws.get('created_at', '')}<br/>"
-            f"<b>Next run:</b> {ws.get('next_execution_at', '')}<br/>"
-            f"<b>State:</b> {ws.get('state', '')}<br/>"
+            f"<b>Name:</b> <a href='{escaped_workflow_url}' target='_blank'>{escaped_name}</a><br/>"
+            f"<b>Workflow ID:</b> {escaped_workflow_id}<br/>"
+            f"<b>Schedule:</b> {escaped_schedule}<br/>"
+            f"<b>Time zone:</b> {escaped_time_zone}<br/>"
+            f"<b>Created:</b> {escaped_created_at}<br/>"
+            f"<b>Next run:</b> {escaped_next_execution_at}<br/>"
+            f"<b>State:</b> {escaped_state}<br/>"
         )
         scheduled_days = ws.get("scheduled_days", [])
         days_of_month = ws.get("scheduled_days_of_month", [])
@@ -76,32 +86,35 @@ def build_calendar_events(workflows, year, month):
             for day in month_days:
                 civis_weekday = (day.weekday() + 1) % 7  # Civis: 0=Sun
                 if civis_weekday in scheduled_days:
-                    first_time = datetime.combine(day, datetime.min.time()) + timedelta(
-                        hours=hours[0], minutes=minutes[0]
-                    )
-                    events.append(
-                        {
-                            "title": ws["name"],
-                            "start": first_time.strftime("%Y-%m-%dT%H:%M:%S"),
-                            "description": tooltip,
-                            "url": workflow_url,
-                        }
-                    )
+                    event_date = datetime.combine(day, datetime.min.time())
+                    for hour in hours:
+                        for minute in minutes:
+                            event_time = event_date + timedelta(hours=hour, minutes=minute)
+                            events.append(
+                                {
+                                    "title": ws["name"],
+                                    "start": event_time.strftime("%Y-%m-%dT%H:%M:%S"),
+                                    "description": tooltip,
+                                    "url": workflow_url,
+                                }
+                            )
         elif days_of_month:
             for dom in days_of_month:
                 try:
                     event_date = datetime(year, month, dom)
                 except ValueError:
                     continue
-                first_time = event_date + timedelta(hours=hours[0], minutes=minutes[0])
-                events.append(
-                    {
-                        "title": ws["name"],
-                        "start": first_time.strftime("%Y-%m-%dT%H:%M:%S"),
-                        "description": tooltip,
-                        "url": workflow_url,
-                    }
-                )
+                for hour in hours:
+                    for minute in minutes:
+                        event_time = event_date + timedelta(hours=hour, minutes=minute)
+                        events.append(
+                            {
+                                "title": ws["name"],
+                                "start": event_time.strftime("%Y-%m-%dT%H:%M:%S"),
+                                "description": tooltip,
+                                "url": workflow_url,
+                            }
+                        )
     return events
 
 
@@ -111,12 +124,19 @@ def build_calendar_events(workflows, year, month):
 def build_everyday_cards(everyday_workflows):
     cards = []
     for ws in everyday_workflows:
-        workflow_url = f"https://platform.civisanalytics.com/spa/#/workflows/{ws['id']}"
+        workflow_name = str(ws.get("name", ""))
+        workflow_url = html_lib.escape(
+            f"https://platform.civisanalytics.com/spa/#/workflows/{ws.get('id', '')}"
+        )
+        workflow_name_lower = html_lib.escape(workflow_name.lower())
+        workflow_name_html = html_lib.escape(workflow_name)
+        schedule_html = html_lib.escape(schedule_to_string(ws))
+        created_at_html = html_lib.escape(str(ws.get("created_at", "")))
         cards.append(
-            f"<div class='workflow-card' data-wfname=\"{html_lib.escape(ws['name'].lower())}\">"
-            f"  <div><b>Name:</b> <a href='{workflow_url}' target='_blank'>{ws['name']}</a></div>"
-            f"  <div class='workflow-meta'><b>Schedule:</b> {schedule_to_string(ws)}</div>"
-            f"  <div class='workflow-meta'><b>Created:</b> {ws.get('created_at', '')}</div>"
+            f"<div class='workflow-card' data-wfname=\"{workflow_name_lower}\">"
+            f"  <div><b>Name:</b> <a href='{workflow_url}' target='_blank'>{workflow_name_html}</a></div>"
+            f"  <div class='workflow-meta'><b>Schedule:</b> {schedule_html}</div>"
+            f"  <div class='workflow-meta'><b>Created:</b> {created_at_html}</div>"
             f"</div>"
         )
     return "\n".join(cards)
@@ -332,8 +352,66 @@ def build_html(calendar_events, everyday_cards_html, job_id):
     tooltip.className = 'wf-tooltip';
     document.body.appendChild(tooltip);
 
+    function sanitizeTooltipHtml(html) {{
+        var template = document.createElement('template');
+        template.innerHTML = html;
+
+        var allowedTags = new Set([
+            'A', 'B', 'BR', 'CODE', 'DIV', 'EM', 'I', 'LI',
+            'OL', 'P', 'PRE', 'SPAN', 'STRONG', 'UL'
+        ]);
+        var allowedAttrs = {{
+            'A': new Set(['href', 'title', 'target', 'rel'])
+        }};
+
+        function isSafeUrl(value) {{
+            if (!value) return false;
+            var trimmed = value.trim();
+            if (trimmed.startsWith('#') || trimmed.startsWith('/')) return true;
+            try {{
+                var url = new URL(trimmed, window.location.origin);
+                return ['http:', 'https:', 'mailto:'].includes(url.protocol);
+            }} catch (err) {{
+                return false;
+            }}
+        }}
+
+        function sanitizeNode(node) {{
+            Array.from(node.children).forEach(function (child) {{
+                if (!allowedTags.has(child.tagName)) {{
+                    child.replaceWith(document.createTextNode(child.textContent || ''));
+                    return;
+                }}
+
+                Array.from(child.attributes).forEach(function (attr) {{
+                    var tagAttrs = allowedAttrs[child.tagName] || new Set();
+                    var attrName = attr.name.toLowerCase();
+                    if (attrName.startsWith('on') || !tagAttrs.has(attr.name)) {{
+                        child.removeAttribute(attr.name);
+                        return;
+                    }}
+                    if (child.tagName === 'A' && attr.name === 'href' && !isSafeUrl(attr.value)) {{
+                        child.removeAttribute(attr.name);
+                    }}
+                }});
+
+                if (child.tagName === 'A') {{
+                    child.setAttribute('rel', 'noopener noreferrer');
+                    if (child.getAttribute('target') === '_blank') {{
+                        child.setAttribute('rel', 'noopener noreferrer');
+                    }}
+                }}
+
+                sanitizeNode(child);
+            }});
+        }}
+
+        sanitizeNode(template.content);
+        return template.innerHTML;
+    }}
+
     function showTooltip(e, html) {{
-        tooltip.innerHTML = html;
+        tooltip.innerHTML = sanitizeTooltipHtml(html);
         tooltip.style.display = 'block';
         positionTooltip(e);
     }}
@@ -361,21 +439,44 @@ def build_html(calendar_events, everyday_cards_html, job_id):
 
         moreLinkClick: function (arg) {{
             var dateStr = arg.date ? arg.date.toISOString().slice(0, 10) : '';
-            var body    = '<h3>Workflows on ' + dateStr + '</h3><ul>';
-            (arg.allSegs || []).forEach(function (seg) {{
-                var ev   = seg.event;
-                var desc = (ev.extendedProps && ev.extendedProps.description) || '';
-                body += '<li><b>' + ev.title
-                      + '</b><br><span style="font-size:0.95em">' + desc
-                      + '</span></li>';
-            }});
-            body += '</ul><span class="close-btn" id="modal-close">&times;</span>';
-
             var modal   = document.getElementById('event-modal');
             var content = document.getElementById('event-modal-content');
-            content.innerHTML = body;
+            var heading = document.createElement('h3');
+            var list    = document.createElement('ul');
+            var closeBtn = document.createElement('span');
+
+            content.textContent = '';
+
+            heading.textContent = 'Workflows on ' + dateStr;
+            content.appendChild(heading);
+
+            (arg.allSegs || []).forEach(function (seg) {{
+                var ev    = seg.event;
+                var desc  = (ev.extendedProps && ev.extendedProps.description) || '';
+                var item  = document.createElement('li');
+                var title = document.createElement('b');
+                var br    = document.createElement('br');
+                var descSpan = document.createElement('span');
+
+                title.textContent = ev.title || '';
+                descSpan.style.fontSize = '0.95em';
+                descSpan.textContent = desc;
+
+                item.appendChild(title);
+                item.appendChild(br);
+                item.appendChild(descSpan);
+                list.appendChild(item);
+            }});
+
+            content.appendChild(list);
+
+            closeBtn.className = 'close-btn';
+            closeBtn.id = 'modal-close';
+            closeBtn.textContent = '×';
+            content.appendChild(closeBtn);
+
             modal.style.display = 'block';
-            document.getElementById('modal-close').onclick = function ()
+            closeBtn.onclick = function ()
             {{ modal.style.display = 'none'; }};
             modal.onclick = function (e) {{ if (e.target === modal)
             modal.style.display = 'none'; }};
