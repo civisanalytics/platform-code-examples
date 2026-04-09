@@ -3,7 +3,10 @@ import html as html_lib
 import os
 from datetime import datetime, timedelta, timezone
 import json
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+try:
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+except ImportError:
+    from backports.zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 EVERYDAY_SCHEDULED_DAYS = list(range(7))
@@ -677,7 +680,7 @@ def build_html(calendar_events, everyday_cards_html, job_id):
     workflow name to navigate to it in platform.<br><br>
     <b>Refreshing this report:</b>
     Navigate to
-    <a href="https://platform.civisanalytics.com/spa/#/scripts/python3/{escaped_job_id}" target="_blank">this script</a>
+    <a href="https://platform.civisanalytics.com/spa/#/scripts/python3/{escaped_job_id}" target="_blank" rel="noopener noreferrer">this script</a>
     and click the blue <b>Run</b> button.
 </div>
 
@@ -719,12 +722,12 @@ def main():
     everyday_workflows = [
         ws
         for ws in normalized_workflows
-        if sorted(ws["scheduled_days"]) == EVERYDAY_SCHEDULED_DAYS
+        if set(ws["scheduled_days"]) == set(EVERYDAY_SCHEDULED_DAYS)
     ]
     main_workflows = [
         ws
         for ws in normalized_workflows
-        if sorted(ws["scheduled_days"]) != EVERYDAY_SCHEDULED_DAYS
+        if set(ws["scheduled_days"]) != set(EVERYDAY_SCHEDULED_DAYS)
     ]
 
     now = datetime.now(timezone.utc)
