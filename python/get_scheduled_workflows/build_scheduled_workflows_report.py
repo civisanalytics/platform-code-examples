@@ -3,7 +3,10 @@ import html as html_lib
 import os
 from datetime import datetime, timedelta, timezone
 import json
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+try:
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+except ImportError:
+    from backports.zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 EVERYDAY_SCHEDULED_DAYS = list(range(7))
