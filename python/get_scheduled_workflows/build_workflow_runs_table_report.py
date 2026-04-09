@@ -12,6 +12,7 @@ DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
 
 def parse_api_datetime(value):
+    # Civis timestamps typically arrive as UTC strings with a trailing Z.
     if not value:
         return None
     text = str(value).strip()
@@ -69,6 +70,7 @@ def schedule_to_string(workflow):
 
 
 def fetch_most_recent_execution(client, workflow_id):
+    # The CSV only needs the latest execution, so keep this to a single-row lookup.
     executions = client.workflows.list_executions(
         workflow_id,
         limit=1,
@@ -123,6 +125,7 @@ def build_workflow_rows(client, workflows):
             }
         )
 
+    # Surface the most recently-run workflows first in the exported CSV.
     rows.sort(key=lambda row: row["most_recent_run_sort"], reverse=True)
     return rows
 
@@ -155,6 +158,8 @@ def write_csv(rows, file_path):
 def upload_csv_as_run_output(client, local_csv_path, filename):
     import civis
 
+    # Upload the file to Civis Files, then attach that file object to the
+    # current script run so it appears as a downloadable run output.
     file_id = civis.io.file_to_civis(local_csv_path, name=filename)
     client.scripts.post_python3_runs_outputs(
         os.environ["CIVIS_JOB_ID"],
@@ -176,6 +181,8 @@ def main():
     filename = f"workflow_runs_{timestamp}.csv"
     local_csv_path = f"/tmp/{filename}"
 
+    # Write locally first because Civis run outputs attach an uploaded file,
+    # not an in-memory CSV string.
     write_csv(rows, local_csv_path)
     file_id = upload_csv_as_run_output(client, local_csv_path, filename)
     print(f"Attached CSV run output file ID: {file_id}")

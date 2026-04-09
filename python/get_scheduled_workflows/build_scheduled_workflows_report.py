@@ -3,6 +3,7 @@ import html as html_lib
 import os
 from datetime import datetime, timedelta, timezone
 import json
+
 try:
     from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 except ImportError:
@@ -102,6 +103,7 @@ def event_time_pairs(ws):
 
 
 def parse_api_datetime(value):
+    # Civis commonly returns UTC timestamps with a trailing Z.
     if not value:
         return None
     text = str(value).strip()
@@ -129,6 +131,8 @@ def normalize_execution_state(execution):
 
 
 def execution_reference_time(execution):
+    # Prefer the earliest lifecycle timestamp we can use to line an execution
+    # up with its scheduled slot.
     for key in ("started_at", "created_at", "finished_at"):
         timestamp = parse_api_datetime(execution.get(key))
         if timestamp is not None:
@@ -199,6 +203,8 @@ def fetch_workflow_executions(client, workflow_id, window_start_utc, window_end_
     page_num = 1
     limit = 50
     while True:
+        # Keep paging only until executions are older than the month window
+        # needed for the current calendar view.
         page = client.workflows.list_executions(
             workflow_id,
             limit=limit,
@@ -268,6 +274,7 @@ def format_execution_state_label(state):
 
 
 def fetch_most_recent_execution_state(client, workflow_id):
+    # Everyday workflows render as cards, so they only need the latest state.
     executions = client.workflows.list_executions(
         workflow_id,
         limit=1,
@@ -285,6 +292,8 @@ def match_executions_to_occurrences(occurrence_times, executions, now_utc):
     occurrence_times_utc = [occurrence.astimezone(timezone.utc) for occurrence in occurrence_times]
     grace_period = timedelta(minutes=30)
 
+    # Attribute each execution to the most recent scheduled slot before it,
+    # while leaving future occurrences uncolored until they actually run.
     for execution in sorted(executions, key=lambda item: item["reference_at"] or datetime.min.replace(tzinfo=timezone.utc)):
         reference_at = execution.get("reference_at")
         if reference_at is None:
@@ -775,6 +784,7 @@ def main():
         for ws in normalized_workflows
         if set(ws["scheduled_days"]) == set(EVERYDAY_SCHEDULED_DAYS)
     ]
+    # Keep daily workflows out of the calendar grid so the month view stays readable.
     main_workflows = [
         ws
         for ws in normalized_workflows
@@ -787,6 +797,8 @@ def main():
 
     workflow_executions = {}
     for workflow in main_workflows:
+        # Fetch only the executions needed to color the occurrences visible in
+        # the current month.
         occurrence_times = workflow_occurrence_times(workflow, year, month)
         window_start_utc, window_end_utc = workflow_execution_fetch_window(
             occurrence_times
@@ -799,6 +811,8 @@ def main():
         )
 
     everyday_workflow_states = {
+        # The everyday section only shows a latest-state badge, so one lookup
+        # per workflow is enough.
         workflow["id"]: fetch_most_recent_execution_state(client, workflow["id"])
         for workflow in everyday_workflows
     }
