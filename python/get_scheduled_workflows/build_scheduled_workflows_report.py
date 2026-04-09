@@ -677,7 +677,7 @@ def build_html(calendar_events, everyday_cards_html, job_id):
     workflow name to navigate to it in platform.<br><br>
     <b>Refreshing this report:</b>
     Navigate to
-    <a href="https://platform.civisanalytics.com/spa/#/scripts/python3/{escaped_job_id}" target="_blank">this script</a>
+    <a href="https://platform.civisanalytics.com/spa/#/scripts/python3/{escaped_job_id}" target="_blank" rel="noopener noreferrer">this script</a>
     and click the blue <b>Run</b> button.
 </div>
 
