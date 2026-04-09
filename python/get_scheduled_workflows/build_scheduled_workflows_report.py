@@ -15,7 +15,7 @@ EVERYDAY_SCHEDULED_DAYS = list(range(7))
 def fetch_all_workflows(client):
     workflows, page = [], 1
     while True:
-        page_workflows = client.workflows.list(page_num=page)
+        page_workflows = client.workflows.list(page_num=page, scheduled=True)
         if not page_workflows:
             break
         workflows.extend(page_workflows)
