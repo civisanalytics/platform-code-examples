@@ -246,6 +246,40 @@ def execution_state_color(state):
     return "#20639b"
 
 
+def format_execution_state_label(state):
+    normalized_state = str(state or "").strip().lower()
+    if not normalized_state:
+        return "Not run"
+    if normalized_state == "succeeded":
+        return "Succeeded"
+    if normalized_state == "failed":
+        return "Failed"
+    if normalized_state == "cancelled":
+        return "Cancelled"
+    if normalized_state == "queued":
+        return "Queued"
+    if normalized_state == "running":
+        return "Running"
+    if normalized_state == "paused":
+        return "Paused"
+    if normalized_state == "scheduled":
+        return "Scheduled"
+    return normalized_state.title()
+
+
+def fetch_most_recent_execution_state(client, workflow_id):
+    executions = client.workflows.list_executions(
+        workflow_id,
+        limit=1,
+        page_num=1,
+        order="created_at",
+        order_dir="desc",
+    )
+    if not executions:
+        return "not run"
+    return normalize_execution_state(executions[0])
+
+
 def match_executions_to_occurrences(occurrence_times, executions, now_utc):
     matched = [None] * len(occurrence_times)
     occurrence_times_utc = [occurrence.astimezone(timezone.utc) for occurrence in occurrence_times]
@@ -334,7 +368,8 @@ def build_calendar_events(workflows, year, month, workflow_executions=None, now_
 # ---------------------------------------------------------------------------
 # Build everyday workflow cards HTML
 # ---------------------------------------------------------------------------
-def build_everyday_cards(everyday_workflows):
+def build_everyday_cards(everyday_workflows, most_recent_states=None):
+    most_recent_states = most_recent_states or {}
     cards = []
     for ws in everyday_workflows:
         workflow_name = str(ws.get("name", ""))
@@ -345,10 +380,14 @@ def build_everyday_cards(everyday_workflows):
         workflow_name_html = html_lib.escape(workflow_name)
         schedule_html = html_lib.escape(schedule_to_string(ws))
         created_at_html = html_lib.escape(str(ws.get("created_at", "")))
+        most_recent_state = most_recent_states.get(ws["id"], "not run")
+        state_color = execution_state_color(most_recent_state)
+        state_label_html = html_lib.escape(format_execution_state_label(most_recent_state))
         cards.append(
             f"<div class='workflow-card' data-wfname=\"{workflow_name_lower}\">"
             f"  <div><b>Name:</b> <a href='{workflow_url}' target='_blank'>{workflow_name_html}</a></div>"
             f"  <div class='workflow-meta'><b>Schedule:</b> {schedule_html}</div>"
+            f"  <div class='workflow-meta'><b>Most recent run state:</b> <span class='workflow-state'><span class='workflow-state-dot' style='background:{state_color};'></span>{state_label_html}</span></div>"
             f"  <div class='workflow-meta'><b>Created:</b> {created_at_html}</div>"
             f"</div>"
         )
@@ -464,6 +503,18 @@ def build_html_styles():
             font-size: 0.95em;
             color: #555;
             margin-top: 4px;
+        }
+        .workflow-state {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .workflow-state-dot {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex: 0 0 10px;
         }
 
         #event-modal {
@@ -747,6 +798,11 @@ def main():
             window_end_utc,
         )
 
+    everyday_workflow_states = {
+        workflow["id"]: fetch_most_recent_execution_state(client, workflow["id"])
+        for workflow in everyday_workflows
+    }
+
     calendar_events = build_calendar_events(
         main_workflows,
         year,
@@ -754,7 +810,10 @@ def main():
         workflow_executions=workflow_executions,
         now_utc=now,
     )
-    everyday_cards_html = build_everyday_cards(everyday_workflows)
+    everyday_cards_html = build_everyday_cards(
+        everyday_workflows,
+        most_recent_states=everyday_workflow_states,
+    )
     job_id = os.environ.get("CIVIS_JOB_ID", "")
     html = build_html(calendar_events, everyday_cards_html, job_id)
 
