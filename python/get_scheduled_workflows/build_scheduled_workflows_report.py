@@ -719,12 +719,12 @@ def main():
     everyday_workflows = [
         ws
         for ws in normalized_workflows
-        if sorted(ws["scheduled_days"]) == EVERYDAY_SCHEDULED_DAYS
+        if set(ws["scheduled_days"]) == set(EVERYDAY_SCHEDULED_DAYS)
     ]
     main_workflows = [
         ws
         for ws in normalized_workflows
-        if sorted(ws["scheduled_days"]) != EVERYDAY_SCHEDULED_DAYS
+        if set(ws["scheduled_days"]) != set(EVERYDAY_SCHEDULED_DAYS)
     ]
 
     now = datetime.now(timezone.utc)
