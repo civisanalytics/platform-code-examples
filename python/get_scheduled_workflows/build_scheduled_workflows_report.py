@@ -269,20 +269,6 @@ def format_execution_state_label(state):
     return normalized_state.title()
 
 
-def fetch_most_recent_execution_state(client, workflow_id):
-    # Everyday workflows render as cards, so they only need the latest state.
-    executions = client.workflows.list_executions(
-        workflow_id,
-        limit=1,
-        page_num=1,
-        order="created_at",
-        order_dir="desc",
-    )
-    if not executions:
-        return "not run"
-    return normalize_execution_state(executions[0])
-
-
 def match_executions_to_occurrences(occurrence_times, executions, now_utc):
     matched = [None] * len(occurrence_times)
     occurrence_times_utc = [occurrence.astimezone(timezone.utc) for occurrence in occurrence_times]
@@ -381,7 +367,7 @@ def build_everyday_cards(everyday_workflows, most_recent_states=None):
         workflow_url = html_lib.escape(
             f"https://platform.civisanalytics.com/spa/#/workflows/{ws.get('id', '')}"
         )
-        workflow_name_lower = html_lib.escape(workflow_name.lower())
+        workflow_name_lower = html_lib.escape(workflow_name.lower(), quote=True)
         workflow_name_html = html_lib.escape(workflow_name)
         schedule_html = html_lib.escape(schedule_to_string(ws))
         created_at_html = html_lib.escape(str(ws.get("created_at", "")))
@@ -390,7 +376,7 @@ def build_everyday_cards(everyday_workflows, most_recent_states=None):
         state_label_html = html_lib.escape(format_execution_state_label(most_recent_state))
         cards.append(
             f"<div class='workflow-card' data-wfname=\"{workflow_name_lower}\">"
-            f"  <div><b>Name:</b> <a href='{workflow_url}' target='_blank'>{workflow_name_html}</a></div>"
+            f"  <div><b>Name:</b> <a href='{workflow_url}' target='_blank' rel='noopener noreferrer'>{workflow_name_html}</a></div>"
             f"  <div class='workflow-meta'><b>Schedule:</b> {schedule_html}</div>"
             f"  <div class='workflow-meta'><b>Most recent run state:</b> <span class='workflow-state'><span class='workflow-state-dot' style='background:{state_color};'></span>{state_label_html}</span></div>"
             f"  <div class='workflow-meta'><b>Created:</b> {created_at_html}</div>"
@@ -806,10 +792,10 @@ def main():
             window_end_utc,
         )
 
+    # Reuse state from workflows.list to avoid one executions API call per
+    # everyday workflow.
     everyday_workflow_states = {
-        # The everyday section only shows a latest-state badge, so one lookup
-        # per workflow is enough.
-        workflow["id"]: fetch_most_recent_execution_state(client, workflow["id"])
+        workflow["id"]: normalize_execution_state(workflow)
         for workflow in everyday_workflows
     }
 
