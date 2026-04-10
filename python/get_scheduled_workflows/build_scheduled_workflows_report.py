@@ -114,11 +114,7 @@ def parse_api_datetime(value):
 
 
 def normalize_execution_state(execution):
-    state = (
-        str(execution.get("state") or execution.get("mistral_state") or "")
-        .strip()
-        .lower()
-    )
+    state = str(execution.get("state") or execution.get("mistral_state") or "").strip().lower()
     if state in {"failed", "error"}:
         return "failed"
     if state in {"succeeded", "success"}:
@@ -152,9 +148,7 @@ def normalize_execution(execution):
 
 
 def workflow_occurrence_times(ws, year, month):
-    month_days = [
-        d for d in calendar.Calendar().itermonthdates(year, month) if d.month == month
-    ]
+    month_days = [d for d in calendar.Calendar().itermonthdates(year, month) if d.month == month]
     tzinfo = get_workflow_zoneinfo(ws)
     scheduled_days = set(ws.get("scheduled_days", []))
     days_of_month = ws.get("scheduled_days_of_month", [])
@@ -220,9 +214,7 @@ def fetch_workflow_executions(client, workflow_id, window_start_utc, window_end_
             normalized = normalize_execution(execution)
             reference_at = normalized["reference_at"]
             created_at = parse_api_datetime(normalized["created_at"])
-            if created_at is not None and (
-                oldest_in_page is None or created_at < oldest_in_page
-            ):
+            if created_at is not None and (oldest_in_page is None or created_at < oldest_in_page):
                 oldest_in_page = created_at
             if reference_at is None:
                 continue
@@ -275,18 +267,15 @@ def format_execution_state_label(state):
 
 def match_executions_to_occurrences(occurrence_times, executions, now_utc):
     matched = [None] * len(occurrence_times)
-    occurrence_times_utc = [
-        occurrence.astimezone(timezone.utc) for occurrence in occurrence_times
-    ]
+    occurrence_times_utc = [occurrence.astimezone(timezone.utc) for occurrence in occurrence_times]
     grace_period = timedelta(minutes=30)
 
     # Attribute each execution to the most recent scheduled slot before it,
     # while leaving future occurrences uncolored until they actually run.
     for execution in sorted(
         executions,
-        key=lambda item: item["reference_at"]
-        or datetime.min.replace(tzinfo=timezone.utc),
-    ):
+        key=lambda item: item["reference_at"] or datetime.min.replace(tzinfo=timezone.utc),
+    ):  # W503
         reference_at = execution.get("reference_at")
         if reference_at is None:
             continue
@@ -336,9 +325,7 @@ def workflow_event_metadata(ws, event_state, matched_execution):
 # ---------------------------------------------------------------------------
 # Build calendar events for FullCalendar
 # ---------------------------------------------------------------------------
-def build_calendar_events(
-    workflows, year, month, workflow_executions=None, now_utc=None
-):
+def build_calendar_events(workflows, year, month, workflow_executions=None, now_utc=None):
     workflow_executions = workflow_executions or {}
     now_utc = now_utc or datetime.now(timezone.utc)
     events = []
@@ -388,9 +375,7 @@ def build_everyday_cards(everyday_workflows, most_recent_states=None):
         created_at_html = html_lib.escape(str(ws.get("created_at", "")))
         most_recent_state = most_recent_states.get(ws["id"], "not run")
         state_color = execution_state_color(most_recent_state)
-        state_label_html = html_lib.escape(
-            format_execution_state_label(most_recent_state)
-        )
+        state_label_html = html_lib.escape(format_execution_state_label(most_recent_state))
         cards.append(
             f"<div class='workflow-card' data-wfname=\"{workflow_name_lower}\">"
             f"  <div><b>Name:</b> <a href='{workflow_url}' target='_blank' "
@@ -778,8 +763,7 @@ def main():
     normalized_workflows = [
         normalize_workflow(wf)
         for wf in all_workflows
-        if not wf.get("archived", False)
-        and wf.get("schedule", {}).get("scheduled", False)
+        if not wf.get("archived", False) and wf.get("schedule", {}).get("scheduled", False)
     ]
 
     everyday_workflows = [
@@ -803,9 +787,7 @@ def main():
         # Fetch only the executions needed to color the occurrences visible in
         # the current month.
         occurrence_times = workflow_occurrence_times(workflow, year, month)
-        window_start_utc, window_end_utc = workflow_execution_fetch_window(
-            occurrence_times
-        )
+        window_start_utc, window_end_utc = workflow_execution_fetch_window(occurrence_times)
         workflow_executions[workflow["id"]] = fetch_workflow_executions(
             client,
             workflow["id"],
@@ -816,8 +798,7 @@ def main():
     # Reuse state from workflows.list to avoid one executions API call per
     # everyday workflow.
     everyday_workflow_states = {
-        workflow["id"]: normalize_execution_state(workflow)
-        for workflow in everyday_workflows
+        workflow["id"]: normalize_execution_state(workflow) for workflow in everyday_workflows
     }
 
     calendar_events = build_calendar_events(
@@ -835,9 +816,7 @@ def main():
     html = build_html(calendar_events, everyday_cards_html, job_id)
 
     report_name = "Scheduled Workflows"
-    report_description = (
-        "Interactive calendar of non-archived Civis workflows and their schedules."
-    )
+    report_description = "Interactive calendar of non-archived Civis workflows and their schedules."
     report_id = os.environ.get("REPORT_ID")
 
     if report_id:
