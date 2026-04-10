@@ -585,7 +585,8 @@ def build_client_script(calendar_time_zone="local"):
         var title = escapeHtml(event.title || '');
         var workflowUrl = safeExternalUrl(props.workflowUrl);
         var linkedTitle = workflowUrl
-            ? "<a href='" + escapeHtml(workflowUrl) + "' target='_blank' rel='noopener noreferrer'>" + title + "</a>"
+            ? "<a href='" + escapeHtml(workflowUrl) +
+             "' target='_blank' rel='noopener noreferrer'>" + title + "</a>"
             : title;
         var lines = [
             '<b>Name:</b> ' + linkedTitle,
@@ -598,10 +599,12 @@ def build_client_script(calendar_time_zone="local"):
         ];
 
         if (props.matchedExecutionStartedAt) {{
-            lines.push('<b>Matched run started:</b> ' + escapeHtml(props.matchedExecutionStartedAt));
+            lines.push('<b>Matched run started:</b> '
+            + escapeHtml(props.matchedExecutionStartedAt));
         }}
         if (props.matchedExecutionFinishedAt) {{
-            lines.push('<b>Matched run finished:</b> ' + escapeHtml(props.matchedExecutionFinishedAt));
+            lines.push('<b>Matched run finished:</b> '
+            + escapeHtml(props.matchedExecutionFinishedAt));
         }}
 
         return lines.join('<br/>');
@@ -634,7 +637,8 @@ def build_client_script(calendar_time_zone="local"):
         dayMaxEvents: true,
 
         eventClick: function (info) {{
-            var workflowUrl = safeExternalUrl(info.event.url || info.event.extendedProps.workflowUrl);
+            var workflowUrl = safeExternalUrl(info.event.url
+             || info.event.extendedProps.workflowUrl);
             if (!workflowUrl) return;
             info.jsEvent.preventDefault();
             window.open(workflowUrl, '_blank', 'noopener');
@@ -673,7 +677,9 @@ def build_client_script(calendar_time_zone="local"):
 
             modal.style.display = 'block';
             closeBtn.onclick = function () {{ modal.style.display = 'none'; }};
-            modal.onclick = function (e) {{ if (e.target === modal) modal.style.display = 'none'; }};
+            modal.onclick = function (e) {{
+                if (e.target === modal) modal.style.display = 'none';
+            }};
             return false;
         }}
     }});
@@ -710,8 +716,10 @@ def build_html(calendar_events, everyday_cards_html, job_id):
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Civis Workflow Schedules</title>
-    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet" />
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css"
+     rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap"
+     rel="stylesheet" />
     {build_html_styles()}
 </head>
 <body>
@@ -727,7 +735,8 @@ def build_html(calendar_events, everyday_cards_html, job_id):
     workflow name to navigate to it in platform.<br><br>
     <b>Refreshing this report:</b>
     Navigate to
-    <a href="https://platform.civisanalytics.com/spa/#/scripts/python3/{escaped_job_id}" target="_blank" rel="noopener noreferrer">this script</a>
+    <a href="https://platform.civisanalytics.com/spa/#/scripts/python3/{escaped_job_id}"
+     target="_blank" rel="noopener noreferrer">this script</a>
     and click the blue <b>Run</b> button.
 </div>
 
