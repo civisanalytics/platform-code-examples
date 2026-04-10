@@ -114,7 +114,11 @@ def parse_api_datetime(value):
 
 
 def normalize_execution_state(execution):
-    state = str(execution.get("state") or execution.get("mistral_state") or "").strip().lower()
+    state = (
+        str(execution.get("state") or execution.get("mistral_state") or "")
+        .strip()
+        .lower()
+    )
     if state in {"failed", "error"}:
         return "failed"
     if state in {"succeeded", "success"}:
@@ -332,7 +336,9 @@ def workflow_event_metadata(ws, event_state, matched_execution):
 # ---------------------------------------------------------------------------
 # Build calendar events for FullCalendar
 # ---------------------------------------------------------------------------
-def build_calendar_events(workflows, year, month, workflow_executions=None, now_utc=None):
+def build_calendar_events(
+    workflows, year, month, workflow_executions=None, now_utc=None
+):
     workflow_executions = workflow_executions or {}
     now_utc = now_utc or datetime.now(timezone.utc)
     events = []
@@ -772,7 +778,8 @@ def main():
     normalized_workflows = [
         normalize_workflow(wf)
         for wf in all_workflows
-        if not wf.get("archived", False) and wf.get("schedule", {}).get("scheduled", False)
+        if not wf.get("archived", False)
+        and wf.get("schedule", {}).get("scheduled", False)
     ]
 
     everyday_workflows = [
@@ -852,9 +859,7 @@ def main():
             arguments={"REPORT_ID": int(report.id)},
         )
 
-    report_url = (
-        f"https://platform.civisanalytics.com/spa/#/reports/{report['id']}?fullscreen=true"
-    )
+    report_url = f"https://platform.civisanalytics.com/spa/#/reports/{report['id']}?fullscreen=true"
     print(f"Civis report URL: {report_url}")
 
 

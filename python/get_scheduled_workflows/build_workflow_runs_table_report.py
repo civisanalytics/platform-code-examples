@@ -3,7 +3,6 @@ import os
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-
 DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
 
@@ -58,7 +57,9 @@ def schedule_to_string(workflow):
     if hours or minutes:
         hour_values = hours or [0]
         minute_values = minutes or [0]
-        times = [f"{hour}:{minute:02d}" for hour in hour_values for minute in minute_values]
+        times = [
+            f"{hour}:{minute:02d}" for hour in hour_values for minute in minute_values
+        ]
         time_zone = getattr(get_workflow_zoneinfo(workflow), "key", "UTC")
         parts.append(f"Time ({time_zone}): " + ", ".join(times))
 
@@ -115,7 +116,8 @@ def build_workflow_rows(client, workflows):
                     f"https://platform.civisanalytics.com/spa/#/workflows/{workflow['id']}"
                 ),
                 "most_recent_run": display_run_time(run_time),
-                "most_recent_run_sort": run_time or datetime.min.replace(tzinfo=timezone.utc),
+                "most_recent_run_sort": run_time
+                or datetime.min.replace(tzinfo=timezone.utc),
                 "most_recent_run_state": normalize_execution_state(execution),
                 "schedule": schedule_to_string(workflow),
             }
