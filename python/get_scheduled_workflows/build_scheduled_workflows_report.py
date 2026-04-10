@@ -271,12 +271,18 @@ def format_execution_state_label(state):
 
 def match_executions_to_occurrences(occurrence_times, executions, now_utc):
     matched = [None] * len(occurrence_times)
-    occurrence_times_utc = [occurrence.astimezone(timezone.utc) for occurrence in occurrence_times]
+    occurrence_times_utc = [
+        occurrence.astimezone(timezone.utc) for occurrence in occurrence_times
+    ]
     grace_period = timedelta(minutes=30)
 
     # Attribute each execution to the most recent scheduled slot before it,
     # while leaving future occurrences uncolored until they actually run.
-    for execution in sorted(executions, key=lambda item: item["reference_at"] or datetime.min.replace(tzinfo=timezone.utc)):
+    for execution in sorted(
+        executions,
+        key=lambda item: item["reference_at"]
+        or datetime.min.replace(tzinfo=timezone.utc),
+    ):
         reference_at = execution.get("reference_at")
         if reference_at is None:
             continue
@@ -338,7 +344,10 @@ def build_calendar_events(workflows, year, month, workflow_executions=None, now_
             now_utc,
         )
 
-        for occurrence_time, matched_execution in zip(occurrence_times, matched_executions):
+        for occurrence_time, matched_execution in zip(
+            occurrence_times,
+            matched_executions,
+        ):
             occurrence_time_utc = occurrence_time.astimezone(timezone.utc)
             event_state = (
                 matched_execution["state"]
@@ -373,12 +382,17 @@ def build_everyday_cards(everyday_workflows, most_recent_states=None):
         created_at_html = html_lib.escape(str(ws.get("created_at", "")))
         most_recent_state = most_recent_states.get(ws["id"], "not run")
         state_color = execution_state_color(most_recent_state)
-        state_label_html = html_lib.escape(format_execution_state_label(most_recent_state))
+        state_label_html = html_lib.escape(
+            format_execution_state_label(most_recent_state)
+        )
         cards.append(
             f"<div class='workflow-card' data-wfname=\"{workflow_name_lower}\">"
-            f"  <div><b>Name:</b> <a href='{workflow_url}' target='_blank' rel='noopener noreferrer'>{workflow_name_html}</a></div>"
+            f"  <div><b>Name:</b> <a href='{workflow_url}' target='_blank' "
+            f"rel='noopener noreferrer'>{workflow_name_html}</a></div>"
             f"  <div class='workflow-meta'><b>Schedule:</b> {schedule_html}</div>"
-            f"  <div class='workflow-meta'><b>Most recent run state:</b> <span class='workflow-state'><span class='workflow-state-dot' style='background:{state_color};'></span>{state_label_html}</span></div>"
+            f"  <div class='workflow-meta'><b>Most recent run state:</b> "
+            f"<span class='workflow-state'><span class='workflow-state-dot' "
+            f"style='background:{state_color};'></span>{state_label_html}</span></div>"
             f"  <div class='workflow-meta'><b>Created:</b> {created_at_html}</div>"
             f"</div>"
         )
