@@ -1,11 +1,7 @@
 import csv
 import os
 from datetime import datetime, timezone
-
-try:
-    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-except ImportError:
-    from backports.zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
