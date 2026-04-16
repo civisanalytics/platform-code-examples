@@ -11,7 +11,7 @@ This script addresses one specific challenge: **user group management**. User (p
 This automation addresses the problem by:
 
 1. Assuming that all Platform users have a corresponding user in the target database
-2. Ensuring that all included Platform user groups have a corresponding user group in the target database (unless consciously excluded)
+2. Assuming that all included Platform user groups already have corresponding user groups in the target database (unless consciously excluded); the script does **not** create or validate missing database groups
 3. Pulling the list of user group membership for all included Platform user groups
 4. Assigning database users to corresponding database user groups to **match what is set for their Platform counterparts**
 

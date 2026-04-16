@@ -13,12 +13,27 @@ Configuration:
 - Set DRY_RUN=True to preview changes without executing them
 """
 import civis
-import pandas as pd
 import os
 import logging
 from collections import defaultdict
-from distutils.util import strtobool
 
+
+def strtobool(val):
+    """
+    Convert a string representation of truth to True or False.
+
+    This mirrors the behavior of distutils.util.strtobool, returning
+    True for 'y', 'yes', 't', 'true', 'on', '1' and False for
+    'n', 'no', 'f', 'false', 'off', '0' (case-insensitive).
+
+    Raises ValueError if the value is not a recognized boolean string.
+    """
+    val = str(val).strip().lower()
+    if val in ("y", "yes", "t", "true", "on", "1"):
+        return True
+    if val in ("n", "no", "f", "false", "off", "0"):
+        return False
+    raise ValueError(f"invalid truth value {val!r}")
 # Setting up logging
 LOG = logging.getLogger(__name__)
 FORMAT = "%(asctime)-15s %(levelname)s:%(name)s.%(funcName)s:%(lineno)s %(message)s"
@@ -77,7 +92,8 @@ def create_redshift_groups_dictionary(database):
 
     LOG.info("Creating the redshift dictionary")
     redshift = civis.io.read_civis_sql(sql=redshift_sql,
-                                       database=database)
+                                       database=database,
+                                       use_pandas=False)
     LOG.debug(f"The redshift SQL executed: {redshift_sql}")
 
     header = None
@@ -124,7 +140,7 @@ def create_platform_groups_dictionary():
     client = civis.APIClient()
 
     LOG.info("Creating platform group dictionary")
-    group_results = [client.groups.get(result['id']) for result in client.groups.list(limit = 1000)]
+    group_results = client.groups.list(limit=1000)
 
     # String matching in the crosswalk is fragile to whitespaces
     # Recommend converting to use unique group ids from Redshift and Platform instead
@@ -137,7 +153,7 @@ def create_platform_groups_dictionary():
     return platform_group_members
 
 
-def main(database, dry_run = True):
+def main(database, dry_run=True):
     """
     Main function that produces and executes the SQL query to align the redshift and platform groups
     """
@@ -145,7 +161,6 @@ def main(database, dry_run = True):
     # constants and empty lists for the loop
     full_add_list = []
     full_drop_list = []
-    full_platform_group_change_list = []
     full_query_text = ""
 
     # creating the dictionaries and lists we need
@@ -156,11 +171,20 @@ def main(database, dry_run = True):
     redshift_valid_users_list = create_valid_database_users_list(database=database)
     # Edit this list to specify users that should be ignored during group synchronization
     ignore_users_list = ["dbadmin", "console"]
-    # ignore_groups_list =
     
     for platform_group, redshift_group in group_names_crosswalk:
         platform_group_members = platform_group_members_dict[platform_group]
+        original_platform_group_members = list(platform_group_members)
         platform_group_members = [x for x in platform_group_members if x in redshift_valid_users_list]
+        excluded_platform_members = sorted(set(original_platform_group_members) - set(platform_group_members))
+        if excluded_platform_members:
+            LOG.warning(
+                "The following Platform users in group '%s' were skipped because they do not exist as "
+                "valid Redshift users for group '%s': %s",
+                platform_group,
+                redshift_group,
+                ", ".join(excluded_platform_members),
+            )
 
         redshift_group_members = redshift_group_members_dict[redshift_group]
         redshift_group_members = [x for x in redshift_group_members if x not in ignore_users_list]
@@ -183,9 +207,8 @@ def main(database, dry_run = True):
         
         full_query_text = full_query_text + f"\n\n--Platform group name: {platform_group}" + \
             f"\n--Corresponding Redshift group name: {redshift_group}" + \
-            f"\n--Users to add: {add_query}" + f"\n--Users to drop: {drop_query}"
+            f"\n--Add query: {add_query}" + f"\n--Drop query: {drop_query}"
     
-    LOG.info(f"Full Platform Group change list: {full_platform_group_change_list}")
     LOG.info(f"Full add list: {full_add_list}")
     LOG.info(f"Full drop list: {full_drop_list}")
     
@@ -197,8 +220,6 @@ def main(database, dry_run = True):
         LOG.info(full_query_text)
         future = civis.io.query_civis(full_query_text, database = database, hidden = False)
         LOG.info(future.result())
-
-   
 
 if __name__ == "__main__":
     # Different Platform/cloud environments use slightly different formats for Boolean parameters;
