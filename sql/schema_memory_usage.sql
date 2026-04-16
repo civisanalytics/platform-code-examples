@@ -59,7 +59,7 @@ table_sizes AS (
         ROUND(SUM(size)::NUMERIC / 1024, 2) AS size_gb,
         ROUND(SUM(tbl_rows)::NUMERIC, 0) AS total_rows
     FROM svv_table_info
-    WHERE "schema" NOT IN ('pg_catalog', 'information_schema', 'pg_internal')
+    WHERE "schema" NOT IN ('pg_catalog', 'information_schema', 'pg_internal', 'pg_auto_copy',  'pg_automv', 'pg_mv', 'pg_s3')
     GROUP BY "schema"
 ),
 
@@ -77,7 +77,7 @@ view_counts AS (
     FROM pg_class c
     JOIN pg_namespace n ON c.relnamespace = n.oid
     WHERE c.relkind = 'v'  -- 'v' = view in pg_class
-    AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_internal')
+    AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_internal', 'pg_auto_copy',  'pg_automv', 'pg_mv', 'pg_s3')
     GROUP BY n.nspname
 )
 
