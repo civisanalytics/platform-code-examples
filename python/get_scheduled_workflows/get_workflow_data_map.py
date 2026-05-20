@@ -5,6 +5,9 @@ Generate an HTML data-map report for a Civis Platform workflow.
 For each step (Python, SQL, sub-workflow, etc.) the report lists which
 database tables are read (inputs) and which are written/created (outputs),
 then renders a Mermaid.js lineage flowchart.
+
+This script doesn't really handle complicated workflow patterns like dynamic table names
+or dbt models, but it should work reasonably well for straightforward ETL pipelines.
 """
 
 import os
