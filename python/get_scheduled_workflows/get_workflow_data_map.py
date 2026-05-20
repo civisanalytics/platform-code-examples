@@ -465,18 +465,13 @@ def main():
                 description=report_description,
                 code_body=html,
             )
-
-        client.scripts.patch_python3(
-            id=int(os.environ["CIVIS_JOB_ID"]),
-            params=[
-                {"name": "WORKFLOW_ID", "type": "integer", "required": True},
-                {"name": "REPORT_ID",   "type": "integer", "required": False},
-            ],
-            arguments={
-                "WORKFLOW_ID": WORKFLOW_ID,
-                "REPORT_ID":   int(report.id),
-            },
-        )
+            client.scripts.patch_python3(
+                id=int(os.environ["CIVIS_JOB_ID"]),
+                arguments={
+                    "WORKFLOW_ID": WORKFLOW_ID,
+                    "REPORT_ID":   int(report.id),
+                },
+            )
 
         report_url = (
             f"https://platform.civisanalytics.com/spa/#/reports/{report.id}"
