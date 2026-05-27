@@ -50,6 +50,7 @@ def fetch_script_content(client, job_id: int):
         (client.scripts.get_r,          "source",         "r"),
         (client.scripts.get_javascript, "source",         "js"),
         (client.scripts.get_containers, "docker_command", "sh"),
+        (client.scripts.get_dbt,        "name",           "dbt"),
     ]
     for fetch_fn, content_field, ext in attempts:
         try:
@@ -427,6 +428,7 @@ _TYPE_BADGE = {
     "r":        ("#fff3cd", "#856404", "R"),
     "js":       ("#ffeeba", "#856404", "JS"),
     "sh":       ("#e2e3e5", "#383d41", "SH"),
+    "dbt":      ("#ffe8cc", "#7a3800", "DBT"),
     "import":   ("#ffd6e7", "#6b0028", "IMP"),
     "workflow": ("#e8d5f5", "#5a1a8a", "WF"),
     "skipped":  ("#f8f9fa", "#6c757d", "–"),
