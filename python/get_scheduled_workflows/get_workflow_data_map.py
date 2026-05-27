@@ -69,6 +69,40 @@ def fetch_script_content(client, job_id: int):
         return f"# error: {e}", "txt", f"job_{job_id}"
 
 
+def fetch_import_tables(client, job_id: int):
+    """
+    Try to read source/destination tables from a Civis import job.
+    Returns (inputs, outputs) sets, or (None, None) if the job is not an import.
+    """
+    try:
+        imp = client.imports.get(job_id)
+    except Exception:
+        return None, None
+
+    inputs: set[str] = set()
+    outputs: set[str] = set()
+
+    for sync in getattr(imp, "syncs", []) or []:
+        for side, bucket in ((getattr(sync, "source", None), inputs),
+                             (getattr(sync, "destination", None), outputs)):
+            if side is None:
+                continue
+            db_tbl = getattr(side, "database_table", None)
+            if db_tbl:
+                schema = getattr(db_tbl, "schema", None)
+                table  = getattr(db_tbl, "table", None)
+                if schema and table:
+                    bucket.add(f"{schema}.{table}".lower())
+                elif table:
+                    bucket.add(table.lower())
+            else:
+                path = getattr(side, "path", None)
+                if path:
+                    bucket.add(path.lower())
+
+    return inputs, outputs
+
+
 # ── Table extraction ──────────────────────────────────────────────────────────
 
 def _looks_like_table(name: str) -> bool:
@@ -333,7 +367,14 @@ def collect_steps(client, workflow_id: int, execution_id: int, depth: int = 0):
         except Exception as e:
             content, ext = f"# error: {e}", "txt"
 
-        inputs, outputs = extract_tables(content, ext)
+        if ext == "txt":
+            import_inputs, import_outputs = fetch_import_tables(client, job_id)
+            if import_inputs is not None:
+                inputs, outputs, ext = import_inputs, import_outputs, "import"
+            else:
+                inputs, outputs = set(), set()
+        else:
+            inputs, outputs = extract_tables(content, ext)
         print(f"{indent}[{step_num:>2}] ✓  {task_name} ({ext}) "
               f"→ {len(inputs)} in, {len(outputs)} out")
         steps.append({
@@ -358,6 +399,7 @@ _TYPE_BADGE = {
     "r":        ("#fff3cd", "#856404", "R"),
     "js":       ("#ffeeba", "#856404", "JS"),
     "sh":       ("#e2e3e5", "#383d41", "SH"),
+    "import":   ("#ffd6e7", "#6b0028", "IMP"),
     "workflow": ("#e8d5f5", "#5a1a8a", "WF"),
     "skipped":  ("#f8f9fa", "#6c757d", "–"),
     "txt":      ("#f8f9fa", "#6c757d", "?"),
