@@ -83,6 +83,10 @@ def fetch_script_content(client, job_id: int):
     job_type = getattr(job, "type", "")
 
     if job_type not in _JOB_TYPE_TO_SCRIPT:
+        # "Container" is the job type for custom/template scripts — no source code available.
+        if job_type == "Container":
+            custom_name, custom_args = fetch_custom_script_info(client, job_id)
+            return custom_name, "custom", custom_name, custom_args
         return f"# job_type={job_type}", "txt", name, {}
 
     method_name, content_field, ext = _JOB_TYPE_TO_SCRIPT[job_type]
@@ -93,6 +97,17 @@ def fetch_script_content(client, job_id: int):
         return content, ext, name, args
     except Exception as e:
         return f"# error fetching {job_type}: {e}", "txt", name, {}
+
+
+def fetch_custom_script_info(client, script_id: int):
+    """Fetch name and arguments from a custom (template) script via the custom scripts API."""
+    try:
+        script = client.scripts.get_custom(script_id)
+        name = getattr(script, "name", f"custom_{script_id}")
+        args = _extract_arguments(script)
+        return name, args
+    except Exception:
+        return f"custom_{script_id}", {}
 
 
 def fetch_import_tables(client, job_id: int):
@@ -234,7 +249,6 @@ _INLINE_ACTIONS: dict[str, tuple[str, str]] = {
 #   civis.enhancements.*    → enhancement operations; no direct table I/O
 #   std.*                   → Mistral control-flow primitives (noop, echo, fail)
 _UNSUPPORTED_ACTIONS: frozenset[str] = frozenset({
-    "civis.scripts.custom",
     "civis.scripts.patch_python3",
     "civis.scripts.patch_r",
     "civis.scripts.patch_sql",
@@ -300,6 +314,17 @@ def _parse_workflow_yaml(definition: str, execution_input) -> dict:
         if action == "civis.run_job":
             raw_id = task_input.get("job_id") or task_input.get("id")
             info["job_id"] = int(raw_id) if raw_id else None
+        elif action == "civis.scripts.custom":
+            # No inline source — name and defaults fetched from the API at resolution time.
+            # Capture YAML-level arguments so they can be merged with API defaults later.
+            nested = task_input.get("arguments") or {}
+            flat   = {k: resolve(v) for k, v in task_input.items()
+                      if k not in ("id", "arguments") and v is not None}
+            if isinstance(nested, dict):
+                info["args"] = {k: resolve(str(v)) for k, v in nested.items() if v is not None}
+                info["args"].update(flat)
+            else:
+                info["args"] = flat
         elif action in _INLINE_ACTIONS:
             field, ext      = _INLINE_ACTIONS[action]
             info["content"] = resolve(task_input.get(field) or "")
@@ -394,12 +419,78 @@ def extract_tables_with_ai(text: str, file_type: str, args: dict = None):
     return inputs, outputs
 
 
+def extract_tables_with_ai_hint(script_name: str, args: dict):
+    """
+    Infer lineage from a custom script's template name and parameter values only.
+    Called when full source code is unavailable (custom/template scripts).
+    """
+    args_text = "\n".join(f"  {k}: {v}" for k, v in args.items()) if args else "  (none)"
+
+    prompt = (
+        f"You are a data lineage analyst.\n"
+        f"The full source code for this step is unavailable — it is a custom template script.\n"
+        f"Use only the script template name and its parameter names/values to infer data lineage.\n\n"
+        f"Script template name: {script_name}\n"
+        f"Parameters:\n{args_text}\n\n"
+        f"Guidelines:\n"
+        f"- Only include tables/files if the template name or parameter values make them clearly "
+        f"identifiable (e.g. a parameter 'DESTINATION_TABLE' = 'my_schema.my_table').\n"
+        f"- Infer direction from parameter names: 'source_table', 'input_*', 'from_*' → input; "
+        f"'destination_table', 'output_*', 'target_*', 'to_*' → output.\n"
+        f"- Infer task type from the template name: e.g. 'Import Google Sheet' reads a Google "
+        f"Sheet and writes to a destination; 'Export to S3' reads a source table and writes to S3.\n"
+        f"- Return table names in schema.table format where present in the parameter values.\n"
+        f"- If you cannot determine inputs or outputs with reasonable confidence, return empty lists.\n"
+        f"- Do NOT guess or fabricate table names not present in the parameter values.\n"
+    )
+    body = json.dumps({
+        "anthropic_version": "bedrock-2023-05-31",
+        "max_tokens": 1024,
+        "temperature": 0,
+        "messages": [{"role": "user", "content": prompt}],
+        "tools": [{
+            "name": "return_data_lineage",
+            "description": "Return all input and output tables inferred from the script name and parameters.",
+            "input_schema": {
+                "type": "object",
+                "required": ["inputs", "outputs"],
+                "properties": {
+                    "inputs": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Tables/files read by this script",
+                    },
+                    "outputs": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Tables/files written by this script",
+                    },
+                },
+            },
+        }],
+        "tool_choice": {"type": "tool", "name": "return_data_lineage"},
+    })
+    bedrock = _create_bedrock_client()
+    response = bedrock.invoke_model(modelId=BEDROCK_MODEL_ID, body=body)
+    result = json.loads(response["body"].read())
+    data = result["content"][0]["input"]
+    inputs  = {t.lower() for t in data.get("inputs",  [])}
+    outputs = {t.lower() for t in data.get("outputs", [])}
+    inputs -= outputs
+    return inputs, outputs
+
+
 def _extract_sql(content: str, _ext: str, _args: dict):
     return extract_tables_from_sql(content)
 
 
 def _extract_ai(content: str, ext: str, args: dict):
     return extract_tables_with_ai(content, ext, args)
+
+
+def _extract_custom_hint(content: str, _ext: str, args: dict):
+    """Extractor for custom/template scripts: content holds the script template name."""
+    return extract_tables_with_ai_hint(content, args)
 
 
 def _extract_none(_content: str, _ext: str, _args: dict):
@@ -412,12 +503,13 @@ def _extract_none(_content: str, _ext: str, _args: dict):
 # add an entry here. To add a new type using an existing method, add an entry
 # pointing at an existing extractor (e.g. "ts": _extract_ai).
 _EXTRACTORS: dict[str, callable] = {
-    "sql": _extract_sql,   # regex-based; see extract_tables_from_sql
-    "py":  _extract_ai,    # AI via Bedrock
-    "r":   _extract_ai,
-    "js":  _extract_ai,
-    "sh":  _extract_ai,
-    "dbt": _extract_none,  # lineage lives in the dbt project, not the script
+    "sql":    _extract_sql,          # regex-based; see extract_tables_from_sql
+    "py":     _extract_ai,           # AI via Bedrock
+    "r":      _extract_ai,
+    "js":     _extract_ai,
+    "sh":     _extract_ai,
+    "custom": _extract_custom_hint,  # name+args hint only; no source code available
+    "dbt":    _extract_none,         # lineage lives in the dbt project, not the script
 }
 
 
@@ -454,6 +546,10 @@ def _resolve_task_content(client, yaml_info: dict, job_id: int):
     if yaml_info.get("content") is not None:
         return yaml_info["content"], yaml_info["ext"], yaml_info.get("args") or {}
     content, ext, _, args = fetch_script_content(client, job_id)
+    # Merge YAML-resolved args on top of API defaults (YAML values are execution-specific)
+    yaml_args = yaml_info.get("args") or {}
+    if yaml_args:
+        args = {**args, **yaml_args}
     return content, ext, args
 
 
@@ -615,6 +711,7 @@ _TYPE_BADGE = {
     "js":       ("#F1A137", "#0A2138", "JS"),
     "sh":       ("#9CA3AF", "#0A2138", "SH"),
     "dbt":      ("#215470", "#ffffff", "DBT"),
+    "custom":   ("#7C3AED", "#ffffff", "CSTM"),
     "import":   ("#0A2138", "#B0BEC5", "IMP"),
     "workflow": ("#0A2138", "#B0BEC5", "WF"),
     "skipped":     ("#E5E7EB", "#9CA3AF", "–"),
@@ -711,9 +808,25 @@ def _mermaid_nodes(steps, prefix="") -> list[str]:
     return lines
 
 
+def _has_custom_steps(steps) -> bool:
+    return any(
+        s["type"] == "custom" or _has_custom_steps(s["substeps"])
+        for s in steps
+    )
+
+
 def generate_html(steps: list, workflow_name: str) -> str:
     table_rows = _table_rows(steps)
     mermaid_body = "\n".join(_mermaid_nodes(steps))
+    custom_note = (
+        '<div class="custom-note">'
+        '<strong>Note on custom script steps</strong> (shown with a '
+        '<span class="cstm-badge">CSTM</span> badge): '
+        'the full source code for these steps is not available. '
+        'Input and output tables have been inferred from the script template name and '
+        'parameter values using AI — treat this lineage as a best estimate.'
+        '</div>'
+    ) if _has_custom_steps(steps) else ""
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -786,6 +899,23 @@ def generate_html(steps: list, workflow_name: str) -> str:
       white-space: nowrap;
     }}
     .mermaid {{ margin-top: 8px; overflow-x: auto; }}
+    .custom-note {{
+      margin-top: 16px;
+      padding: 10px 14px;
+      background: #F5F3FF;
+      border-left: 4px solid #7C3AED;
+      border-radius: 0 4px 4px 0;
+      font-size: 0.85rem;
+      color: #4B5563;
+    }}
+    .cstm-badge {{
+      background: #7C3AED;
+      color: #fff;
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-size: 0.8em;
+      font-weight: bold;
+    }}
   </style>
 </head>
 <body>
@@ -810,7 +940,7 @@ def generate_html(steps: list, workflow_name: str) -> str:
 {table_rows}
       </tbody>
     </table>
-
+{custom_note}
     <h2>Data Lineage</h2>
     <div class="mermaid">
 flowchart LR
