@@ -55,37 +55,44 @@ def _extract_arguments(job) -> dict:
         return {}
 
 
+# Maps the job type string returned by /jobs/{id} to the specific script API.
+# Add entries here as new job types are discovered.
+# Format: job_type_str → (client.scripts method name, content field, file extension)
+_JOB_TYPE_TO_SCRIPT: dict[str, tuple[str, str, str]] = {
+    "JobTypes::PythonDocker":    ("get_python3",    "source",         "py"),
+    "JobTypes::SqlRunner":       ("get_sql",        "sql",            "sql"),
+    "JobTypes::RDocker":         ("get_r",          "source",         "r"),
+    "JobTypes::ContainerDocker": ("get_containers", "docker_command", "sh"),
+    "JobTypes::DbtDocker":       ("get_dbt",        "name",           "dbt"),
+    # JobTypes::JavaScriptDocker: ("get_javascript", "source", "js"),  # add when confirmed
+}
+
+
 def fetch_script_content(client, job_id: int):
     """
-    Try each known Civis script type in turn.
+    Fetch script content for a job.
+    Uses /jobs/{id} to determine the type, then calls the appropriate script API.
     Returns (content: str, extension: str, job_name: str, args: dict).
-    args contains the job's variable bindings (e.g. TABLE_NAME='mmk_test').
     """
-    attempts = [
-        (client.scripts.get_python3,    "source",         "py"),
-        (client.scripts.get_sql,        "sql",            "sql"),
-        (client.scripts.get_r,          "source",         "r"),
-        (client.scripts.get_javascript, "source",         "js"),
-        (client.scripts.get_containers, "docker_command", "sh"),
-        (client.scripts.get_dbt,        "name",           "dbt"),
-    ]
-    for fetch_fn, content_field, ext in attempts:
-        try:
-            job     = fetch_fn(job_id)
-            content = getattr(job, content_field, None) or ""
-            name    = getattr(job, "name", f"job_{job_id}")
-            args    = _extract_arguments(job)
-            return content, ext, name, args
-        except Exception:
-            continue
-
     try:
-        job      = client.jobs.get(job_id)
-        name     = getattr(job, "name", f"job_{job_id}")
-        job_type = getattr(job, "type", "unknown")
-        return f"# job_type={job_type}", "txt", name, {}
+        job = client.jobs.get(job_id)
     except Exception as e:
         return f"# error: {e}", "txt", f"job_{job_id}", {}
+
+    name     = getattr(job, "name", f"job_{job_id}")
+    job_type = getattr(job, "type", "")
+
+    if job_type not in _JOB_TYPE_TO_SCRIPT:
+        return f"# job_type={job_type}", "txt", name, {}
+
+    method_name, content_field, ext = _JOB_TYPE_TO_SCRIPT[job_type]
+    try:
+        script  = getattr(client.scripts, method_name)(job_id)
+        content = getattr(script, content_field, None) or ""
+        args    = _extract_arguments(script)
+        return content, ext, name, args
+    except Exception as e:
+        return f"# error fetching {job_type}: {e}", "txt", name, {}
 
 
 def fetch_import_tables(client, job_id: int):
@@ -200,50 +207,45 @@ def extract_tables_from_sql(text: str):
     return inputs, outputs
 
 
-def extract_tables_from_python(text: str):
-    """Return (inputs, outputs) sets from a Python script."""
-    inputs: set[str] = set()
-    outputs: set[str] = set()
 
-    # civis.io.read_civis(table="schema.table", ...)
-    for m in re.finditer(
-        r"civis\.io\.read_civis\s*\([^)]*?table\s*=\s*[\"']([^\"']+)",
-        text, re.IGNORECASE | re.DOTALL
-    ):
-        inputs.add(m.group(1).lower())
-
-    # civis.io.dataframe_to_civis(df, table="schema.table", ...)
-    for m in re.finditer(
-        r"civis\.io\.dataframe_to_civis\s*\([^)]*?table\s*=\s*[\"']([^\"']+)",
-        text, re.IGNORECASE | re.DOTALL
-    ):
-        outputs.add(m.group(1).lower())
-
-    # civis.io.write_civis(df, table="schema.table", ...)
-    for m in re.finditer(
-        r"civis\.io\.write_civis\s*\([^)]*?table\s*=\s*[\"']([^\"']+)",
-        text, re.IGNORECASE | re.DOTALL
-    ):
-        outputs.add(m.group(1).lower())
-
-    # Embedded SQL in triple-quoted or double-quoted strings
-    for m in re.finditer(r'"""(.*?)"""|\'\'\'(.*?)\'\'\'', text, re.DOTALL):
-        sql_chunk = m.group(1) or m.group(2)
-        i, o = extract_tables_from_sql(sql_chunk)
-        inputs |= i
-        outputs |= o
-
-    inputs -= outputs
-    return inputs, outputs
-
-
-# Maps Mistral inline action names to (content_field, file_extension)
-_INLINE_ACTIONS = {
-    "civis.scripts.sql":        ("sql",    "sql"),
-    "civis.scripts.python3":    ("source", "py"),
-    "civis.scripts.r":          ("source", "r"),
-    "civis.scripts.javascript": ("source", "js"),
+# ── Supported action types ────────────────────────────────────────────────────
+#
+# INLINE — code is embedded in the workflow YAML; type is known without any
+#   API call.  Maps action name → (yaml_input_field, file_extension).
+_INLINE_ACTIONS: dict[str, tuple[str, str]] = {
+    "civis.scripts.python3":    ("source",         "py"),
+    "civis.scripts.r":          ("source",         "r"),
+    "civis.scripts.sql":        ("sql",            "sql"),
+    "civis.scripts.javascript": ("source",         "js"),
+    "civis.scripts.container":  ("docker_command", "sh"),
+    "civis.scripts.dbt":        ("name",           "dbt"),
 }
+#
+# RUNTIME-RESOLVED — type is determined at runtime via an API call:
+#   civis.run_job           → scripts/jobs API (could be any script type)
+#   civis.import            → imports API (source/destination tables)
+#
+# SUB-WORKFLOW — detected from execution child data, not the YAML action:
+#   civis.workflows.execute → recursed into via child execution IDs
+#
+# UNSUPPORTED — recognised actions where lineage extraction is not possible.
+#   civis.scripts.custom    → template-backed; inline code is not available
+#   civis.scripts.patch_*   → modifies existing scripts; no data movement
+#   civis.enhancements.*    → enhancement operations; no direct table I/O
+#   std.*                   → Mistral control-flow primitives (noop, echo, fail)
+_UNSUPPORTED_ACTIONS: frozenset[str] = frozenset({
+    "civis.scripts.custom",
+    "civis.scripts.patch_python3",
+    "civis.scripts.patch_r",
+    "civis.scripts.patch_sql",
+    "civis.scripts.patch_container",
+    "civis.enhancements.cass_ncoa",
+    "std.noop",
+    "std.async_noop",
+    "std.echo",
+    "std.fail",
+})
+# ─────────────────────────────────────────────────────────────────────────────
 
 
 def _parse_workflow_yaml(definition: str, execution_input) -> dict:
@@ -392,20 +394,67 @@ def extract_tables_with_ai(text: str, file_type: str, args: dict = None):
     return inputs, outputs
 
 
+def _extract_sql(content: str, _ext: str, _args: dict):
+    return extract_tables_from_sql(content)
+
+
+def _extract_ai(content: str, ext: str, args: dict):
+    return extract_tables_with_ai(content, ext, args)
+
+
+def _extract_none(_content: str, _ext: str, _args: dict):
+    return set(), set()
+
+
+# Maps file extension to its extraction method.
+# Each extractor has the signature: (content, ext, args) -> (inputs, outputs).
+# To add a new extraction method: define a function with that signature and
+# add an entry here. To add a new type using an existing method, add an entry
+# pointing at an existing extractor (e.g. "ts": _extract_ai).
+_EXTRACTORS: dict[str, callable] = {
+    "sql": _extract_sql,   # regex-based; see extract_tables_from_sql
+    "py":  _extract_ai,    # AI via Bedrock
+    "r":   _extract_ai,
+    "js":  _extract_ai,
+    "sh":  _extract_ai,
+    "dbt": _extract_none,  # lineage lives in the dbt project, not the script
+}
+
+
 def extract_tables(content: str, ext: str, args: dict = None):
-    """Dispatch to the right extractor based on file extension."""
-    if ext == "sql":
-        return extract_tables_from_sql(content)
+    """Dispatch to the right extractor for this script type."""
+    extractor = _EXTRACTORS.get(ext, _extract_ai)  # default to AI for unknown types
     try:
-        return extract_tables_with_ai(content, ext, args)
+        return extractor(content, ext, args or {})
     except Exception as e:
-        print(f"  ⚠  AI extraction failed ({ext}): {e}; falling back to regex")
-        if ext == "py":
-            return extract_tables_from_python(content)
+        print(f"  ⚠  Extraction failed ({ext}): {e}")
         return set(), set()
 
 
 # ── Step collection ───────────────────────────────────────────────────────────
+
+def _resolve_task_content(client, yaml_info: dict, job_id: int):
+    """
+    Resolve the source code and script type for one task.
+
+    There are two sources, but both produce the same output:
+    - Inline YAML tasks (civis.scripts.*): content is already in the YAML,
+      resolved by _parse_workflow_yaml.
+    - Run-job tasks (civis.run_job): the jobs API identifies the script type,
+      then the matching script API fetches the content.
+
+    Returns (content, ext, args). After this call, extract_tables(content, ext,
+    args) applies identically regardless of how the content was obtained.
+
+    To add support for a new script type:
+    - For inline tasks:  add one entry to _INLINE_ACTIONS.
+    - For API-fetched tasks: add one entry to _JOB_TYPE_TO_SCRIPT.
+    - No changes needed here or in extract_tables.
+    """
+    if yaml_info.get("content") is not None:
+        return yaml_info["content"], yaml_info["ext"], yaml_info.get("args") or {}
+    return fetch_script_content(client, job_id)
+
 
 def _task_start_time(task) -> str:
     """Return the earliest started_at across a task's runs/executions, or '' if none."""
@@ -502,25 +551,43 @@ def collect_steps(client, workflow_id: int, execution_id: int, depth: int = 0):
             })
             continue
 
-        # Determine content source: prefer YAML inline content (YAQL already resolved),
-        # fall back to fetching the saved script from the API.
-        if yaml_info.get("content") is not None:
-            content, ext = yaml_info["content"], yaml_info["ext"]
-            args = yaml_info.get("args") or {}
-        else:
-            try:
-                content, ext, _, args = fetch_script_content(client, job_id)
-            except Exception as e:
-                content, ext, args = f"# error: {e}", "txt", {}
+        action = yaml_info.get("action", "")
 
-        if ext == "txt":
-            import_inputs, import_outputs = fetch_import_tables(client, job_id)
-            if import_inputs is not None:
-                inputs, outputs, ext = import_inputs, import_outputs, "import"
-            else:
-                inputs, outputs = set(), set()
+        if action in _UNSUPPORTED_ACTIONS:
+            print(f"{indent}[{step_num:>2}] –  {task_name}  (unsupported: {action})")
+            steps.append({
+                "step_num": step_num,
+                "name":     task_name,
+                "type":     "unsupported",
+                "job_id":   job_id,
+                "inputs":   [],
+                "outputs":  [],
+                "substeps": [],
+                "depth":    depth,
+            })
+            continue
+
+        if action == "civis.import":
+            # Import jobs expose tables via the imports API, not script content.
+            imp_in, imp_out = fetch_import_tables(client, job_id)
+            inputs, outputs, ext = (imp_in or set()), (imp_out or set()), "import"
         else:
-            inputs, outputs = extract_tables(content, ext, args)
+            # Step 1: resolve type and content.
+            # Both paths produce identical (content, ext, args) — inline YAML
+            # tasks return content directly; civis.run_job tasks use the jobs
+            # API to identify the type then fetch from the matching script API.
+            content, ext, args = _resolve_task_content(client, yaml_info, job_id)
+
+            if ext == "txt":
+                # Type not recognised — try the imports API as a last resort.
+                imp_in, imp_out = fetch_import_tables(client, job_id)
+                if imp_in is not None:
+                    inputs, outputs, ext = imp_in, imp_out, "import"
+                else:
+                    inputs, outputs = set(), set()
+            else:
+                # Step 2: extract table lineage from the resolved content.
+                inputs, outputs = extract_tables(content, ext, args)
 
         print(f"{indent}[{step_num:>2}] ✓  {task_name} ({ext}) "
               f"→ {len(inputs)} in, {len(outputs)} out")
@@ -549,8 +616,9 @@ _TYPE_BADGE = {
     "dbt":      ("#215470", "#ffffff", "DBT"),
     "import":   ("#0A2138", "#B0BEC5", "IMP"),
     "workflow": ("#0A2138", "#B0BEC5", "WF"),
-    "skipped":  ("#E5E7EB", "#9CA3AF", "–"),
-    "txt":      ("#E5E7EB", "#9CA3AF", "?"),
+    "skipped":     ("#E5E7EB", "#9CA3AF", "–"),
+    "unsupported": ("#E5E7EB", "#9CA3AF", "N/A"),
+    "txt":         ("#E5E7EB", "#9CA3AF", "?"),
 }
 
 

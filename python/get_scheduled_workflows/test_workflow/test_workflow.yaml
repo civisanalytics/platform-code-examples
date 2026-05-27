@@ -1,0 +1,14 @@
+---
+version: '2.0'
+workflow:
+  tasks:
+    Sql_Step:
+      action: civis.run_job
+      input:
+        job_id: 354476185
+      on-success:
+      - Python_step
+    Python_step:
+      action: civis.run_job
+      input:
+        job_id: 354477296
