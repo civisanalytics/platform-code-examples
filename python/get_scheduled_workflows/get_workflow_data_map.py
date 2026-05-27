@@ -118,16 +118,17 @@ def extract_tables_from_sql(text: str):
     inputs: set[str] = set()
     outputs: set[str] = set()
 
-    # Strip line comments so they don't confuse regexes
+    # Strip line comments and string literals so they don't confuse regexes
     cleaned = re.sub(r"--[^\n]*", "", text)
+    cleaned = re.sub(r"'[^']*'", "''", cleaned)  # single-quoted literals → ''
 
     # Inputs: FROM clause — handles comma-separated table lists
     # e.g. FROM t1 alias, t2 alias WHERE ...
     for m in re.finditer(r"\bFROM\b", cleaned, re.IGNORECASE):
         rest = cleaned[m.end():]
-        # Grab everything up to the next major clause keyword
+        # Grab everything up to the next clause keyword or statement boundary
         clause = re.split(
-            r"\b(?:WHERE|JOIN|ON|SET|GROUP|ORDER|HAVING|LIMIT|UNION|EXCEPT|INTERSECT|INTO|VALUES)\b",
+            r"(?:\b(?:WHERE|JOIN|ON|SET|GROUP|ORDER|HAVING|LIMIT|UNION|EXCEPT|INTERSECT|INTO|VALUES)\b|;)",
             rest, maxsplit=1, flags=re.IGNORECASE
         )[0]
         for entry in clause.split(","):
