@@ -438,20 +438,21 @@ def extract_tables_with_ai_hint(script_name: str, args: dict):
 
     prompt = (
         f"You are a data lineage analyst.\n"
-        f"The full source code for this step is unavailable — it is a custom template script.\n"
-        f"Use only the script template name and its parameter names/values to infer data lineage.\n\n"
-        f"Script template name: {script_name}\n"
+        f"The full source code for this step is not available for analysis. "
+        f"Use the script name or command and its parameter names/values to infer data lineage.\n\n"
+        f"Script name / command: {script_name}\n"
         f"Parameters:\n{args_text}\n\n"
         f"Guidelines:\n"
-        f"- Only include tables/files if the template name or parameter values make them clearly "
+        f"- Only include tables/files if the name/command or parameter values make them clearly "
         f"identifiable (e.g. a parameter 'DESTINATION_TABLE' = 'my_schema.my_table').\n"
         f"- Infer direction from parameter names: 'source_table', 'input_*', 'from_*' → input; "
         f"'destination_table', 'output_*', 'target_*', 'to_*' → output.\n"
-        f"- Infer task type from the template name: e.g. 'Import Google Sheet' reads a Google "
-        f"Sheet and writes to a destination; 'Export to S3' reads a source table and writes to S3.\n"
-        f"- Return table names in schema.table format where present in the parameter values.\n"
+        f"- Infer task type from the script name or command: e.g. 'Import Google Sheet' reads a "
+        f"Google Sheet and writes to a destination; 'Export to S3' reads a source table and "
+        f"writes to S3; a command referencing --destination-table flag → output.\n"
+        f"- Return table names in schema.table format where present in the name or parameter values.\n"
         f"- If you cannot determine inputs or outputs with reasonable confidence, return empty lists.\n"
-        f"- Do NOT guess or fabricate table names not present in the parameter values.\n"
+        f"- Do NOT guess or fabricate table names not present in the name or parameter values.\n"
     )
     body = json.dumps({
         "anthropic_version": "bedrock-2023-05-31",
@@ -831,9 +832,14 @@ def _mermaid_nodes(steps, prefix="") -> list[str]:
     return lines
 
 
-def _has_custom_steps(steps) -> bool:
+_HINT_BASED_TYPES: frozenset[str] = frozenset(
+    ext for ext, fn in _EXTRACTORS.items() if fn is _extract_custom_hint
+)
+
+
+def _has_hint_based_steps(steps) -> bool:
     return any(
-        s["type"] == "custom" or _has_custom_steps(s["substeps"])
+        s["type"] in _HINT_BASED_TYPES or _has_hint_based_steps(s["substeps"])
         for s in steps
     )
 
@@ -843,13 +849,14 @@ def generate_html(steps: list, workflow_name: str) -> str:
     mermaid_body = "\n".join(_mermaid_nodes(steps))
     custom_note = (
         '<div class="custom-note">'
-        '<strong>Note on custom script steps</strong> (shown with a '
-        '<span class="cstm-badge">CSTM</span> badge): '
-        'the full source code for these steps is not available. '
-        'Input and output tables have been inferred from the script template name and '
+        '<strong>Note on estimated lineage steps</strong> '
+        '(<span class="cstm-badge">CSTM</span> and <span class="cstm-badge" '
+        'style="background:#9CA3AF;color:#0A2138">SH</span> badges): '
+        'the full source code for these steps is not available for analysis. '
+        'Input and output tables have been inferred from the script name, command, and '
         'parameter values using AI — treat this lineage as a best estimate.'
         '</div>'
-    ) if _has_custom_steps(steps) else ""
+    ) if _has_hint_based_steps(steps) else ""
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -857,6 +864,7 @@ def generate_html(steps: list, workflow_name: str) -> str:
   <meta charset="UTF-8">
   <title>Data Map: {workflow_name}</title>
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
   <style>
     *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
     body {{
@@ -921,7 +929,29 @@ def generate_html(steps: list, workflow_name: str) -> str:
       font-size: 0.82em;
       white-space: nowrap;
     }}
-    .mermaid {{ margin-top: 8px; overflow-x: auto; }}
+    .diagram-controls {{
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+      margin-bottom: 6px;
+    }}
+    .diagram-controls button {{
+      background: #215470;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      padding: 4px 12px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+    }}
+    .diagram-controls button:hover {{ background: #0097A7; }}
+    .mermaid {{
+      height: 520px;
+      border: 1px solid #E5E7EB;
+      border-radius: 4px;
+      overflow: hidden;
+    }}
     .custom-note {{
       margin-top: 16px;
       padding: 10px 14px;
@@ -965,6 +995,11 @@ def generate_html(steps: list, workflow_name: str) -> str:
     </table>
 {custom_note}
     <h2>Data Lineage</h2>
+    <div class="diagram-controls">
+      <button onclick="_pz&&_pz.zoomIn()">+ Zoom in</button>
+      <button onclick="_pz&&_pz.zoomOut()">− Zoom out</button>
+      <button onclick="if(_pz){{_pz.fit();_pz.center();}}">⊡ Fit</button>
+    </div>
     <div class="mermaid">
 flowchart LR
 {mermaid_body}
@@ -972,7 +1007,23 @@ flowchart LR
   </div>
 
   <script>
-    mermaid.initialize({{ startOnLoad: true, theme: "neutral" }});
+    let _pz = null;
+    mermaid.initialize({{ startOnLoad: false, theme: "neutral" }});
+    mermaid.run().then(() => {{
+      const svg = document.querySelector(".mermaid svg");
+      if (svg) {{
+        svg.setAttribute("width",  "100%");
+        svg.setAttribute("height", "100%");
+        _pz = svgPanZoom(svg, {{
+          zoomEnabled: true,
+          panEnabled: true,
+          controlIconsEnabled: false,
+          fit: true,
+          center: true,
+          minZoom: 0.05,
+        }});
+      }}
+    }});
   </script>
 </body>
 </html>
