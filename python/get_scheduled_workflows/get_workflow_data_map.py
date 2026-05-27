@@ -225,11 +225,23 @@ def extract_tables_from_python(text: str):
     return inputs, outputs
 
 
-def _parse_task_args(definition: str, execution_input) -> dict:
+# Maps Mistral inline action names to (content_field, file_extension)
+_INLINE_ACTIONS = {
+    "civis.scripts.sql":        ("sql",    "sql"),
+    "civis.scripts.python3":    ("source", "py"),
+    "civis.scripts.r":          ("source", "r"),
+    "civis.scripts.javascript": ("source", "js"),
+}
+
+
+def _parse_workflow_yaml(definition: str, execution_input) -> dict:
     """
-    Parse a Mistral workflow YAML definition and return
-    {task_name: {arg_key: resolved_value}} with template expressions resolved
-    against the execution-level inputs.
+    Parse a Mistral workflow YAML definition and return per-task info keyed by task name.
+    Each value is a dict with:
+      'action'  : str       — Mistral action name
+      'job_id'  : int|None  — for civis.run_job tasks
+      'content' : str|None  — YAQL-resolved inline code for civis.scripts.* tasks
+      'ext'     : str|None  — 'sql', 'py', 'r', 'js' for inline tasks
     """
     if not _YAML_AVAILABLE or not definition:
         return {}
@@ -238,14 +250,23 @@ def _parse_task_args(definition: str, execution_input) -> dict:
     except Exception:
         return {}
 
-    # Flatten execution inputs (Response object or plain dict)
+    # Flatten execution-level inputs for YAQL resolution
     exec_inputs = {}
     if execution_input:
         items = (execution_input.items() if hasattr(execution_input, "items")
                  else vars(execution_input).items())
         exec_inputs = {str(k): str(v) for k, v in items if v is not None}
 
-    # Find the workflow body — first non-"version" key that has a "tasks" dict
+    def resolve(val):
+        """Substitute <% $.varname %> YAQL expressions with their execution values."""
+        if not isinstance(val, str):
+            return str(val) if val is not None else ""
+        return re.sub(
+            r'<%\s*\$\.(\w+)\s*%>',
+            lambda m: exec_inputs.get(m.group(1), m.group(0)),
+            val,
+        )
+
     workflow_body = next(
         (v for k, v in doc.items()
          if k != "version" and isinstance(v, dict) and "tasks" in v),
@@ -258,40 +279,20 @@ def _parse_task_args(definition: str, execution_input) -> dict:
     for task_name, task_def in (workflow_body.get("tasks") or {}).items():
         if not isinstance(task_def, dict):
             continue
-        arguments = (task_def.get("input") or {}).get("arguments") or {}
-        resolved = {}
-        for arg_key, arg_val in arguments.items():
-            val = str(arg_val) if arg_val is not None else ""
-            # Resolve <% $.varname %> (YAQL) and {{ varname }} (Jinja) expressions
-            val = re.sub(
-                r'<%\s*\$\.(\w+)\s*%>|{{\s*(\w+)\s*}}',
-                lambda m: exec_inputs.get(m.group(1) or m.group(2), m.group(0)),
-                val,
-            )
-            resolved[arg_key] = val
-        result[task_name] = resolved
+        action     = task_def.get("action", "")
+        task_input = task_def.get("input") or {}
+        info       = {"action": action, "job_id": None, "content": None, "ext": None}
+
+        if action == "civis.run_job":
+            raw_id = task_input.get("job_id") or task_input.get("id")
+            info["job_id"] = int(raw_id) if raw_id else None
+        elif action in _INLINE_ACTIONS:
+            field, ext      = _INLINE_ACTIONS[action]
+            info["content"] = resolve(task_input.get(field) or "")
+            info["ext"]     = ext
+
+        result[task_name] = info
     return result
-
-
-_OUTPUT_ARG_HINTS = {"output", "dest", "destination", "target", "write", "result", "sink"}
-
-
-def _tables_from_args(args: dict) -> tuple:
-    """
-    Scan script arguments for schema.table-valued entries.
-    Keys containing output-like words are treated as outputs; everything else as inputs.
-    """
-    inputs: set = set()
-    outputs: set = set()
-    for key, val in args.items():
-        if not val or "." not in val:
-            continue
-        val = val.strip()
-        if not re.match(r'^[\w]+\.[\w]+$', val):
-            continue
-        bucket = outputs if any(h in key.lower() for h in _OUTPUT_ARG_HINTS) else inputs
-        bucket.add(val.lower())
-    return inputs, outputs
 
 
 def _create_bedrock_client():
@@ -311,29 +312,20 @@ def _create_bedrock_client():
     )
 
 
-def extract_tables_with_ai(text: str, file_type: str, args: dict | None = None):
+def extract_tables_with_ai(text: str, file_type: str):
     """Return (inputs, outputs) sets by asking Claude via Bedrock to analyse the script."""
-
-    args_section = ""
-    if args:
-        args_lines = "\n".join(f"  {k} = {v!r}" for k, v in args.items())
-        args_section = (
-            f"\nThis script was invoked with these parameters — use them to resolve "
-            f"any dynamic table name references in the code:\n{args_lines}\n"
-        )
 
     prompt = (
         f"You are a data lineage analyst.\n"
         f"Analyse the following {file_type} script and identify every database table or file "
-        f"that is READ (inputs) and every table or file that is WRITTEN or CREATED (outputs).\n"
-        f"{args_section}\n"
+        f"that is READ (inputs) and every table or file that is WRITTEN or CREATED (outputs).\n\n"
         f"Guidelines:\n"
         f"- Return table names in schema.table format where visible.\n"
         f"- For Civis Platform scripts: civis.io.read_civis / read_civis_sql = input; "
         f"civis.io.dataframe_to_civis / write_civis = output.\n"
         f"- For pandas: read_sql / read_csv pointing to a table = input; to_sql = output.\n"
-        f"- For dynamic table names (f-strings, variables), use the provided parameters "
-        f"to resolve them where possible, or omit if still unknowable.\n"
+        f"- For dynamic table names (f-strings, variables), make a best-guess using "
+        f"the surrounding context, or omit if unknowable.\n"
         f"- Exclude temporary in-memory dataframes; only include persistent storage "
         f"(databases, files written to disk/S3).\n\n"
         f"Script ({file_type}):\n{text}"
@@ -375,12 +367,12 @@ def extract_tables_with_ai(text: str, file_type: str, args: dict | None = None):
     return inputs, outputs
 
 
-def extract_tables(content: str, ext: str, args: dict | None = None):
+def extract_tables(content: str, ext: str):
     """Dispatch to the right extractor based on file extension."""
     if ext == "sql":
         return extract_tables_from_sql(content)
     try:
-        return extract_tables_with_ai(content, ext, args)
+        return extract_tables_with_ai(content, ext)
     except Exception as e:
         print(f"  ⚠  AI extraction failed ({ext}): {e}; falling back to regex")
         if ext == "py":
@@ -415,8 +407,8 @@ def collect_steps(client, workflow_id: int, execution_id: int, depth: int = 0):
         print(f"{'  ' * depth}⚠  Could not fetch execution {execution_id}: {e}")
         return []
 
-    # Parse YAML definition once to get per-task argument values
-    task_args_map = _parse_task_args(
+    # Parse YAML once — drives content source and type for each task
+    yaml_task_map = _parse_workflow_yaml(
         getattr(execution, "definition", "") or "",
         getattr(execution, "input", None),
     )
@@ -431,7 +423,7 @@ def collect_steps(client, workflow_id: int, execution_id: int, depth: int = 0):
 
     for step_num, (_, task) in enumerate(ordered, start=1):
         task_name = task.name
-        task_args = task_args_map.get(task_name, {})
+        yaml_info = yaml_task_map.get(task_name, {})
         indent    = "  " * depth
 
         # Find job_id from runs
@@ -485,11 +477,15 @@ def collect_steps(client, workflow_id: int, execution_id: int, depth: int = 0):
             })
             continue
 
-        # Direct script
-        try:
-            content, ext, _ = fetch_script_content(client, job_id)
-        except Exception as e:
-            content, ext = f"# error: {e}", "txt"
+        # Determine content source: prefer YAML inline content (YAQL already resolved),
+        # fall back to fetching the saved script from the API.
+        if yaml_info.get("content") is not None:
+            content, ext = yaml_info["content"], yaml_info["ext"]
+        else:
+            try:
+                content, ext, _ = fetch_script_content(client, job_id)
+            except Exception as e:
+                content, ext = f"# error: {e}", "txt"
 
         if ext == "txt":
             import_inputs, import_outputs = fetch_import_tables(client, job_id)
@@ -498,12 +494,8 @@ def collect_steps(client, workflow_id: int, execution_id: int, depth: int = 0):
             else:
                 inputs, outputs = set(), set()
         else:
-            inputs, outputs = extract_tables(content, ext, task_args)
+            inputs, outputs = extract_tables(content, ext)
 
-        # Supplement with any schema.table values found in the step's YAML arguments
-        arg_inputs, arg_outputs = _tables_from_args(task_args)
-        outputs |= arg_outputs
-        inputs  = (inputs | arg_inputs) - outputs
         print(f"{indent}[{step_num:>2}] ✓  {task_name} ({ext}) "
               f"→ {len(inputs)} in, {len(outputs)} out")
         steps.append({
