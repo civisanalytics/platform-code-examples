@@ -108,8 +108,15 @@ def fetch_custom_script_info(client, script_id: int):
         script = client.scripts.get_custom(script_id)
         name = getattr(script, "name", f"custom_{script_id}")
         args = _extract_arguments(script)
+        print(f"  [debug] get_custom({script_id}): name={name!r}")
+        if args:
+            for k, v in args.items():
+                print(f"  [debug]   arg  {k}={v!r}")
+        else:
+            print(f"  [debug]   (no arguments returned by API)")
         return name, args
-    except Exception:
+    except Exception as e:
+        print(f"  [debug] get_custom({script_id}) failed: {e}")
         return f"custom_{script_id}", {}
 
 
@@ -473,6 +480,7 @@ def extract_tables_with_ai_hint(script_name: str, args: dict):
         }],
         "tool_choice": {"type": "tool", "name": "return_data_lineage"},
     })
+    print(f"  [debug] sending custom-hint prompt to Bedrock (template={script_name!r}, {len(args)} args)")
     bedrock = _create_bedrock_client()
     response = bedrock.invoke_model(modelId=BEDROCK_MODEL_ID, body=body)
     result = json.loads(response["body"].read())
@@ -480,6 +488,8 @@ def extract_tables_with_ai_hint(script_name: str, args: dict):
     inputs  = {t.lower() for t in data.get("inputs",  [])}
     outputs = {t.lower() for t in data.get("outputs", [])}
     inputs -= outputs
+    print(f"  [debug] AI inferred inputs:  {sorted(inputs) or '(none)'}")
+    print(f"  [debug] AI inferred outputs: {sorted(outputs) or '(none)'}")
     return inputs, outputs
 
 
@@ -510,7 +520,7 @@ _EXTRACTORS: dict[str, callable] = {
     "py":     _extract_ai,           # AI via Bedrock
     "r":      _extract_ai,
     "js":     _extract_ai,
-    "sh":     _extract_ai,
+    "sh":     _extract_custom_hint,
     "custom": _extract_custom_hint,  # name+args hint only; no source code available
     "dbt":    _extract_none,         # lineage lives in the dbt project, not the script
 }
@@ -519,6 +529,7 @@ _EXTRACTORS: dict[str, callable] = {
 def extract_tables(content: str, ext: str, args: dict = None):
     """Dispatch to the right extractor for this script type."""
     extractor = _EXTRACTORS.get(ext, _extract_ai)  # default to AI for unknown types
+    print(f"  [debug] extraction: ext={ext!r}  extractor={extractor.__name__}")
     try:
         return extractor(content, ext, args or {})
     except Exception as e:
@@ -552,7 +563,16 @@ def _resolve_task_content(client, yaml_info: dict, job_id: int):
     # Merge YAML-resolved args on top of API defaults (YAML values are execution-specific)
     yaml_args = yaml_info.get("args") or {}
     if yaml_args:
+        print(f"  [debug] merging {len(yaml_args)} YAML arg(s) into API args for job {job_id}")
+        for k, v in yaml_args.items():
+            print(f"  [debug]   yaml arg  {k}={v!r}")
         args = {**args, **yaml_args}
+    if ext == "custom":
+        print(f"  [debug] final args for custom extraction (job {job_id}):")
+        for k, v in args.items():
+            print(f"  [debug]   {k}={v!r}")
+        if not args:
+            print(f"  [debug]   (no args — AI will rely on template name only)")
     return content, ext, args
 
 
