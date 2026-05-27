@@ -453,7 +453,8 @@ def _resolve_task_content(client, yaml_info: dict, job_id: int):
     """
     if yaml_info.get("content") is not None:
         return yaml_info["content"], yaml_info["ext"], yaml_info.get("args") or {}
-    return fetch_script_content(client, job_id)
+    content, ext, _, args = fetch_script_content(client, job_id)
+    return content, ext, args
 
 
 def _task_start_time(task) -> str:
