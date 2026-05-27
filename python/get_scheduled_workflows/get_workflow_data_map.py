@@ -81,12 +81,15 @@ def fetch_script_content(client, job_id: int):
 
     name     = getattr(job, "name", f"job_{job_id}")
     job_type = getattr(job, "type", "")
+    print(f"  [debug] job {job_id}: name={name!r}  type={job_type!r}")
 
     if job_type not in _JOB_TYPE_TO_SCRIPT:
         # "Container" is the job type for custom/template scripts — no source code available.
         if job_type == "Container":
+            print(f"  [debug] job {job_id}: recognised as custom/template script, calling get_custom")
             custom_name, custom_args = fetch_custom_script_info(client, job_id)
             return custom_name, "custom", custom_name, custom_args
+        print(f"  [debug] job {job_id}: unrecognised job type {job_type!r}, skipping")
         return f"# job_type={job_type}", "txt", name, {}
 
     method_name, content_field, ext = _JOB_TYPE_TO_SCRIPT[job_type]
