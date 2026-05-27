@@ -103,8 +103,6 @@ def fetch_import_tables(client, job_id: int):
     return inputs, outputs
 
 
-# ── Table extraction ──────────────────────────────────────────────────────────
-
 def _looks_like_table(name: str) -> bool:
     """Heuristic: reject bare keywords and subquery artifacts."""
     lower = name.lower().rstrip(")")
@@ -292,6 +290,20 @@ def extract_tables(content: str, ext: str):
 
 # ── Step collection ───────────────────────────────────────────────────────────
 
+def _task_start_time(task) -> str:
+    """Return the earliest started_at across a task's runs/executions, or '' if none."""
+    times = []
+    for run in getattr(task, "runs", []) or []:
+        t = getattr(run, "started_at", None)
+        if t:
+            times.append(t)
+    for exc in getattr(task, "executions", []) or []:
+        t = getattr(exc, "started_at", None)
+        if t:
+            times.append(t)
+    return min(times) if times else ""
+
+
 def collect_steps(client, workflow_id: int, execution_id: int, depth: int = 0):
     """
     Recursively collect step data for a workflow execution.
@@ -303,10 +315,15 @@ def collect_steps(client, workflow_id: int, execution_id: int, depth: int = 0):
         print(f"{'  ' * depth}⚠  Could not fetch execution {execution_id}: {e}")
         return []
 
-    tasks = execution.tasks or []
+    # Sort by actual start time; tasks with no timestamp (skipped) sort last.
+    raw_tasks = execution.tasks or []
+    ordered = sorted(
+        enumerate(raw_tasks),
+        key=lambda pair: (_task_start_time(pair[1]) or "\xff", pair[0]),
+    )
     steps = []
 
-    for step_num, task in enumerate(tasks, start=1):
+    for step_num, (_, task) in enumerate(ordered, start=1):
         task_name = task.name
         indent    = "  " * depth
 
@@ -442,12 +459,24 @@ def _mermaid_id(label: str) -> str:
     return re.sub(r"[^\w]", "_", label)
 
 
+def _safe_mermaid_label(text: str) -> str:
+    """Sanitize a string for use inside a Mermaid double-quoted label."""
+    return (text
+            .replace('"', "'")
+            .replace("[", "(")
+            .replace("]", ")")
+            .replace("{", "(")
+            .replace("}", ")")
+            .replace("#", "")
+            .replace(";", ","))
+
+
 def _mermaid_nodes(steps, prefix="") -> list[str]:
     """Recursively build Mermaid flowchart lines."""
     lines = []
     for s in steps:
         step_id = f"STEP_{prefix}{s['step_num']}"
-        safe_name = s["name"].replace('"', "'")
+        safe_name = _safe_mermaid_label(s["name"])
 
         if s["type"] == "workflow":
             lines.append(f'  subgraph {step_id}["{s["step_num"]}. {safe_name}"]')
@@ -459,12 +488,12 @@ def _mermaid_nodes(steps, prefix="") -> list[str]:
 
         for tbl in s["inputs"]:
             tbl_id = "TBL_" + _mermaid_id(tbl)
-            lines.append(f'  {tbl_id}[("{tbl}")]')
+            lines.append(f'  {tbl_id}[("{_safe_mermaid_label(tbl)}")]')
             lines.append(f"  {tbl_id} --> {step_id}")
 
         for tbl in s["outputs"]:
             tbl_id = "TBL_" + _mermaid_id(tbl)
-            lines.append(f'  {tbl_id}[("{tbl}")]')
+            lines.append(f'  {tbl_id}[("{_safe_mermaid_label(tbl)}")]')
             lines.append(f"  {step_id} --> {tbl_id}")
 
     return lines
