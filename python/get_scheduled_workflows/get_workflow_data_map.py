@@ -118,9 +118,8 @@ def extract_tables_from_sql(text: str):
     inputs: set[str] = set()
     outputs: set[str] = set()
 
-    # Strip line comments and string literals so they don't confuse regexes
+    # Strip line comments so they don't confuse regexes
     cleaned = re.sub(r"--[^\n]*", "", text)
-    cleaned = re.sub(r"'[^']*'", "''", cleaned)  # single-quoted literals → ''
 
     # Inputs: FROM clause — handles comma-separated table lists
     # e.g. FROM t1 alias, t2 alias WHERE ...
@@ -147,9 +146,18 @@ def extract_tables_from_sql(text: str):
     for m in re.finditer(r"\bINSERT\s+(?:INTO\s+)?([\w.]+)", cleaned, re.IGNORECASE):
         outputs.add(m.group(1).lower())
 
-    # Outputs: CREATE TABLE [OR REPLACE] [TEMP] [IF NOT EXISTS] <name>
+    # Temp tables are transient — collect them so they can be excluded everywhere
+    temp_tables: set[str] = set()
     for m in re.finditer(
-        r"\bCREATE\s+(?:OR\s+REPLACE\s+)?(?:TEMP(?:ORARY)?\s+)?TABLE\s+"
+        r"\bCREATE\s+(?:OR\s+REPLACE\s+)?TEMP(?:ORARY)?\s+TABLE\s+"
+        r"(?:IF\s+NOT\s+EXISTS\s+)?([\w.]+)",
+        cleaned, re.IGNORECASE
+    ):
+        temp_tables.add(m.group(1).lower())
+
+    # Outputs: CREATE TABLE (non-temp only)
+    for m in re.finditer(
+        r"\bCREATE\s+(?:OR\s+REPLACE\s+)?TABLE\s+"
         r"(?:IF\s+NOT\s+EXISTS\s+)?([\w.]+)",
         cleaned, re.IGNORECASE
     ):
@@ -161,6 +169,8 @@ def extract_tables_from_sql(text: str):
         if _looks_like_table(name):
             outputs.add(name.lower())
 
+    # Temp tables are internal — not real inputs or outputs
+    inputs -= temp_tables
     # A table that is both read from and written to is an in-place update —
     # keep it in outputs only to avoid self-loops in the diagram.
     inputs -= outputs
