@@ -45,10 +45,21 @@ def safe_filename(name: str) -> str:
     return re.sub(r"[^\w\-]", "_", name).strip("_")
 
 
+def _extract_arguments(job) -> dict:
+    """Return the job's arguments as a plain {str: str} dict."""
+    raw = getattr(job, "arguments", None) or {}
+    try:
+        items = raw.items() if hasattr(raw, "items") else dict(raw).items()
+        return {str(k): str(v) for k, v in items if v is not None}
+    except Exception:
+        return {}
+
+
 def fetch_script_content(client, job_id: int):
     """
     Try each known Civis script type in turn.
-    Returns (content: str, extension: str, job_name: str).
+    Returns (content: str, extension: str, job_name: str, args: dict).
+    args contains the job's variable bindings (e.g. TABLE_NAME='mmk_test').
     """
     attempts = [
         (client.scripts.get_python3,    "source",         "py"),
@@ -63,7 +74,8 @@ def fetch_script_content(client, job_id: int):
             job     = fetch_fn(job_id)
             content = getattr(job, content_field, None) or ""
             name    = getattr(job, "name", f"job_{job_id}")
-            return content, ext, name
+            args    = _extract_arguments(job)
+            return content, ext, name, args
         except Exception:
             continue
 
@@ -71,9 +83,9 @@ def fetch_script_content(client, job_id: int):
         job      = client.jobs.get(job_id)
         name     = getattr(job, "name", f"job_{job_id}")
         job_type = getattr(job, "type", "unknown")
-        return f"# job_type={job_type}", "txt", name
+        return f"# job_type={job_type}", "txt", name, {}
     except Exception as e:
-        return f"# error: {e}", "txt", f"job_{job_id}"
+        return f"# error: {e}", "txt", f"job_{job_id}", {}
 
 
 def fetch_import_tables(client, job_id: int):
@@ -112,7 +124,7 @@ def fetch_import_tables(client, job_id: int):
 
 def _looks_like_table(name: str) -> bool:
     """Heuristic: reject bare keywords and subquery artifacts."""
-    lower = name.lower().rstrip(")")
+    lower = name.lower()
     if lower in _SQL_NON_TABLE_KEYWORDS:
         return False
     if "(" in name or ")" in name:
@@ -281,7 +293,7 @@ def _parse_workflow_yaml(definition: str, execution_input) -> dict:
             continue
         action     = task_def.get("action", "")
         task_input = task_def.get("input") or {}
-        info       = {"action": action, "job_id": None, "content": None, "ext": None}
+        info       = {"action": action, "job_id": None, "content": None, "ext": None, "args": {}}
 
         if action == "civis.run_job":
             raw_id = task_input.get("job_id") or task_input.get("id")
@@ -290,6 +302,10 @@ def _parse_workflow_yaml(definition: str, execution_input) -> dict:
             field, ext      = _INLINE_ACTIONS[action]
             info["content"] = resolve(task_input.get(field) or "")
             info["ext"]     = ext
+            # All other input fields are variable bindings; resolve YAQL in their values.
+            info["args"]    = {
+                k: resolve(v) for k, v in task_input.items() if k != field
+            }
 
         result[task_name] = info
     return result
@@ -312,20 +328,29 @@ def _create_bedrock_client():
     )
 
 
-def extract_tables_with_ai(text: str, file_type: str):
+def extract_tables_with_ai(text: str, file_type: str, args: dict = None):
     """Return (inputs, outputs) sets by asking Claude via Bedrock to analyse the script."""
+
+    args_context = ""
+    if args:
+        bindings = ", ".join(f"{k}={v!r}" for k, v in args.items())
+        args_context = (
+            f"\nKnown runtime variable values: {bindings}\n"
+            f"Use these to resolve f-strings and variable references when identifying table names.\n"
+        )
 
     prompt = (
         f"You are a data lineage analyst.\n"
         f"Analyse the following {file_type} script and identify every database table or file "
-        f"that is READ (inputs) and every table or file that is WRITTEN or CREATED (outputs).\n\n"
+        f"that is READ (inputs) and every table or file that is WRITTEN or CREATED (outputs).\n"
+        f"{args_context}\n"
         f"Guidelines:\n"
         f"- Return table names in schema.table format where visible.\n"
         f"- For Civis Platform scripts: civis.io.read_civis / read_civis_sql = input; "
         f"civis.io.dataframe_to_civis / write_civis = output.\n"
         f"- For pandas: read_sql / read_csv pointing to a table = input; to_sql = output.\n"
-        f"- For dynamic table names (f-strings, variables), make a best-guess using "
-        f"the surrounding context, or omit if unknowable.\n"
+        f"- For dynamic table names (f-strings, variables), resolve using the known variable "
+        f"values above where possible; omit if still unknowable.\n"
         f"- Exclude temporary in-memory dataframes; only include persistent storage "
         f"(databases, files written to disk/S3).\n\n"
         f"Script ({file_type}):\n{text}"
@@ -367,12 +392,12 @@ def extract_tables_with_ai(text: str, file_type: str):
     return inputs, outputs
 
 
-def extract_tables(content: str, ext: str):
+def extract_tables(content: str, ext: str, args: dict = None):
     """Dispatch to the right extractor based on file extension."""
     if ext == "sql":
         return extract_tables_from_sql(content)
     try:
-        return extract_tables_with_ai(content, ext)
+        return extract_tables_with_ai(content, ext, args)
     except Exception as e:
         print(f"  ⚠  AI extraction failed ({ext}): {e}; falling back to regex")
         if ext == "py":
@@ -393,7 +418,7 @@ def _task_start_time(task) -> str:
         t = getattr(exc, "started_at", None)
         if t:
             times.append(t)
-    return min(times) if times else ""
+    return str(min(times)) if times else ""
 
 
 def collect_steps(client, workflow_id: int, execution_id: int, depth: int = 0):
@@ -481,11 +506,12 @@ def collect_steps(client, workflow_id: int, execution_id: int, depth: int = 0):
         # fall back to fetching the saved script from the API.
         if yaml_info.get("content") is not None:
             content, ext = yaml_info["content"], yaml_info["ext"]
+            args = yaml_info.get("args") or {}
         else:
             try:
-                content, ext, _ = fetch_script_content(client, job_id)
+                content, ext, _, args = fetch_script_content(client, job_id)
             except Exception as e:
-                content, ext = f"# error: {e}", "txt"
+                content, ext, args = f"# error: {e}", "txt", {}
 
         if ext == "txt":
             import_inputs, import_outputs = fetch_import_tables(client, job_id)
@@ -494,7 +520,7 @@ def collect_steps(client, workflow_id: int, execution_id: int, depth: int = 0):
             else:
                 inputs, outputs = set(), set()
         else:
-            inputs, outputs = extract_tables(content, ext)
+            inputs, outputs = extract_tables(content, ext, args)
 
         print(f"{indent}[{step_num:>2}] ✓  {task_name} ({ext}) "
               f"→ {len(inputs)} in, {len(outputs)} out")
@@ -535,6 +561,10 @@ def _badge(ext: str) -> str:
 
 
 def _table_rows(steps, depth=0) -> str:
+    return "\n".join(_collect_rows(steps, depth))
+
+
+def _collect_rows(steps, depth=0) -> list[str]:
     rows = []
     pad = depth * 24
     for s in steps:
@@ -556,8 +586,8 @@ def _table_rows(steps, depth=0) -> str:
             f'</tr>'
         )
         if s["substeps"]:
-            rows.append(_table_rows(s["substeps"], depth + 1))
-    return "\n".join(rows)
+            rows.extend(_collect_rows(s["substeps"], depth + 1))
+    return rows
 
 
 def _mermaid_id(label: str) -> str:
@@ -574,6 +604,15 @@ def _safe_mermaid_label(text: str) -> str:
             .replace("}", ")")
             .replace("#", "")
             .replace(";", ","))
+
+
+def _mermaid_table_links(lines: list, tables, step_id: str, to_step: bool) -> None:
+    """Append table node declarations and directional arrows to `lines`."""
+    for tbl in tables:
+        tbl_id = "TBL_" + _mermaid_id(tbl)
+        lines.append(f'  {tbl_id}[("{_safe_mermaid_label(tbl)}")]')
+        edge = f"  {tbl_id} --> {step_id}" if to_step else f"  {step_id} --> {tbl_id}"
+        lines.append(edge)
 
 
 def _mermaid_nodes(steps, prefix="") -> list[str]:
@@ -593,15 +632,8 @@ def _mermaid_nodes(steps, prefix="") -> list[str]:
             shape = f'["{s["step_num"]}. {safe_name}"]'
             lines.append(f"  {step_id}{shape}")
 
-        for tbl in s["inputs"]:
-            tbl_id = "TBL_" + _mermaid_id(tbl)
-            lines.append(f'  {tbl_id}[("{_safe_mermaid_label(tbl)}")]')
-            lines.append(f"  {tbl_id} --> {step_id}")
-
-        for tbl in s["outputs"]:
-            tbl_id = "TBL_" + _mermaid_id(tbl)
-            lines.append(f'  {tbl_id}[("{_safe_mermaid_label(tbl)}")]')
-            lines.append(f"  {step_id} --> {tbl_id}")
+        _mermaid_table_links(lines, s["inputs"],  step_id, to_step=True)
+        _mermaid_table_links(lines, s["outputs"], step_id, to_step=False)
 
     # Invisible links enforce left-to-right step ordering in the layout
     for a, b in zip(step_ids, step_ids[1:]):
