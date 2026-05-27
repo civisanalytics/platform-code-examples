@@ -30,4 +30,12 @@ civis.io.dataframe_to_civis(
     existing_table_rows="drop",
 )
 
+civis.io.dataframe_to_civis(
+    orders,
+    database=DATABASE,
+    table=f"scratch.{TABLE_NAME}_simple",
+    existing_table_rows="drop",
+)
+
+
 print(f"Written {len(summary)} rows to scratch.{TABLE_NAME}")
