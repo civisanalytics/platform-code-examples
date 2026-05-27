@@ -16,6 +16,12 @@ import json
 import os
 import re
 import sys
+
+try:
+    import yaml
+    _YAML_AVAILABLE = True
+except ImportError:
+    _YAML_AVAILABLE = False
 import boto3
 from botocore.config import Config
 import civis
@@ -219,6 +225,75 @@ def extract_tables_from_python(text: str):
     return inputs, outputs
 
 
+def _parse_task_args(definition: str, execution_input) -> dict:
+    """
+    Parse a Mistral workflow YAML definition and return
+    {task_name: {arg_key: resolved_value}} with template expressions resolved
+    against the execution-level inputs.
+    """
+    if not _YAML_AVAILABLE or not definition:
+        return {}
+    try:
+        doc = yaml.safe_load(definition)
+    except Exception:
+        return {}
+
+    # Flatten execution inputs (Response object or plain dict)
+    exec_inputs = {}
+    if execution_input:
+        items = (execution_input.items() if hasattr(execution_input, "items")
+                 else vars(execution_input).items())
+        exec_inputs = {str(k): str(v) for k, v in items if v is not None}
+
+    # Find the workflow body — first non-"version" key that has a "tasks" dict
+    workflow_body = next(
+        (v for k, v in doc.items()
+         if k != "version" and isinstance(v, dict) and "tasks" in v),
+        None,
+    )
+    if not workflow_body:
+        return {}
+
+    result = {}
+    for task_name, task_def in (workflow_body.get("tasks") or {}).items():
+        if not isinstance(task_def, dict):
+            continue
+        arguments = (task_def.get("input") or {}).get("arguments") or {}
+        resolved = {}
+        for arg_key, arg_val in arguments.items():
+            val = str(arg_val) if arg_val is not None else ""
+            # Resolve <% $.varname %> (YAQL) and {{ varname }} (Jinja) expressions
+            val = re.sub(
+                r'<%\s*\$\.(\w+)\s*%>|{{\s*(\w+)\s*}}',
+                lambda m: exec_inputs.get(m.group(1) or m.group(2), m.group(0)),
+                val,
+            )
+            resolved[arg_key] = val
+        result[task_name] = resolved
+    return result
+
+
+_OUTPUT_ARG_HINTS = {"output", "dest", "destination", "target", "write", "result", "sink"}
+
+
+def _tables_from_args(args: dict) -> tuple:
+    """
+    Scan script arguments for schema.table-valued entries.
+    Keys containing output-like words are treated as outputs; everything else as inputs.
+    """
+    inputs: set = set()
+    outputs: set = set()
+    for key, val in args.items():
+        if not val or "." not in val:
+            continue
+        val = val.strip()
+        if not re.match(r'^[\w]+\.[\w]+$', val):
+            continue
+        bucket = outputs if any(h in key.lower() for h in _OUTPUT_ARG_HINTS) else inputs
+        bucket.add(val.lower())
+    return inputs, outputs
+
+
 def _create_bedrock_client():
     aws_access_key = os.environ.get("AWS_ACCESS_KEY_ID")
     aws_secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
@@ -236,20 +311,29 @@ def _create_bedrock_client():
     )
 
 
-def extract_tables_with_ai(text: str, file_type: str):
+def extract_tables_with_ai(text: str, file_type: str, args: dict | None = None):
     """Return (inputs, outputs) sets by asking Claude via Bedrock to analyse the script."""
+
+    args_section = ""
+    if args:
+        args_lines = "\n".join(f"  {k} = {v!r}" for k, v in args.items())
+        args_section = (
+            f"\nThis script was invoked with these parameters — use them to resolve "
+            f"any dynamic table name references in the code:\n{args_lines}\n"
+        )
 
     prompt = (
         f"You are a data lineage analyst.\n"
         f"Analyse the following {file_type} script and identify every database table or file "
-        f"that is READ (inputs) and every table or file that is WRITTEN or CREATED (outputs).\n\n"
+        f"that is READ (inputs) and every table or file that is WRITTEN or CREATED (outputs).\n"
+        f"{args_section}\n"
         f"Guidelines:\n"
         f"- Return table names in schema.table format where visible.\n"
         f"- For Civis Platform scripts: civis.io.read_civis / read_civis_sql = input; "
         f"civis.io.dataframe_to_civis / write_civis = output.\n"
         f"- For pandas: read_sql / read_csv pointing to a table = input; to_sql = output.\n"
-        f"- For dynamic table names (f-strings, variables), make a best-guess using "
-        f"the surrounding context, or omit if unknowable.\n"
+        f"- For dynamic table names (f-strings, variables), use the provided parameters "
+        f"to resolve them where possible, or omit if still unknowable.\n"
         f"- Exclude temporary in-memory dataframes; only include persistent storage "
         f"(databases, files written to disk/S3).\n\n"
         f"Script ({file_type}):\n{text}"
@@ -291,12 +375,12 @@ def extract_tables_with_ai(text: str, file_type: str):
     return inputs, outputs
 
 
-def extract_tables(content: str, ext: str):
+def extract_tables(content: str, ext: str, args: dict | None = None):
     """Dispatch to the right extractor based on file extension."""
     if ext == "sql":
         return extract_tables_from_sql(content)
     try:
-        return extract_tables_with_ai(content, ext)
+        return extract_tables_with_ai(content, ext, args)
     except Exception as e:
         print(f"  ⚠  AI extraction failed ({ext}): {e}; falling back to regex")
         if ext == "py":
@@ -331,6 +415,12 @@ def collect_steps(client, workflow_id: int, execution_id: int, depth: int = 0):
         print(f"{'  ' * depth}⚠  Could not fetch execution {execution_id}: {e}")
         return []
 
+    # Parse YAML definition once to get per-task argument values
+    task_args_map = _parse_task_args(
+        getattr(execution, "definition", "") or "",
+        getattr(execution, "input", None),
+    )
+
     # Sort by actual start time; tasks with no timestamp (skipped) sort last.
     raw_tasks = execution.tasks or []
     ordered = sorted(
@@ -341,6 +431,7 @@ def collect_steps(client, workflow_id: int, execution_id: int, depth: int = 0):
 
     for step_num, (_, task) in enumerate(ordered, start=1):
         task_name = task.name
+        task_args = task_args_map.get(task_name, {})
         indent    = "  " * depth
 
         # Find job_id from runs
@@ -407,7 +498,12 @@ def collect_steps(client, workflow_id: int, execution_id: int, depth: int = 0):
             else:
                 inputs, outputs = set(), set()
         else:
-            inputs, outputs = extract_tables(content, ext)
+            inputs, outputs = extract_tables(content, ext, task_args)
+
+        # Supplement with any schema.table values found in the step's YAML arguments
+        arg_inputs, arg_outputs = _tables_from_args(task_args)
+        outputs |= arg_outputs
+        inputs  = (inputs | arg_inputs) - outputs
         print(f"{indent}[{step_num:>2}] ✓  {task_name} ({ext}) "
               f"→ {len(inputs)} in, {len(outputs)} out")
         steps.append({
@@ -540,7 +636,7 @@ def generate_html(steps: list, workflow_name: str) -> str:
       color: #4B5563;
     }}
     .report-header {{
-      background: #215470;
+      background: #0097A7;
       padding: 32px 40px 28px;
     }}
     .report-header h1 {{
