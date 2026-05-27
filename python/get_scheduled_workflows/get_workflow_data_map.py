@@ -540,7 +540,7 @@ def generate_html(steps: list, workflow_name: str) -> str:
       color: #4B5563;
     }}
     .report-header {{
-      background: linear-gradient(135deg, #058DC7 0%, #215470 55%, #0A2138 100%);
+      background: #215470;
       padding: 32px 40px 28px;
     }}
     .report-header h1 {{
