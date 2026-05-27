@@ -427,16 +427,16 @@ def collect_steps(client, workflow_id: int, execution_id: int, depth: int = 0):
 # ── HTML generation ───────────────────────────────────────────────────────────
 
 _TYPE_BADGE = {
-    "sql":      ("#d4edda", "#155724", "SQL"),
-    "py":       ("#cce5ff", "#004085", "PY"),
-    "r":        ("#fff3cd", "#856404", "R"),
-    "js":       ("#ffeeba", "#856404", "JS"),
-    "sh":       ("#e2e3e5", "#383d41", "SH"),
-    "dbt":      ("#ffe8cc", "#7a3800", "DBT"),
-    "import":   ("#ffd6e7", "#6b0028", "IMP"),
-    "workflow": ("#e8d5f5", "#5a1a8a", "WF"),
-    "skipped":  ("#f8f9fa", "#6c757d", "–"),
-    "txt":      ("#f8f9fa", "#6c757d", "?"),
+    "sql":      ("#0097A7", "#ffffff", "SQL"),
+    "py":       ("#058DC7", "#ffffff", "PY"),
+    "r":        ("#F1A137", "#0A2138", "R"),
+    "js":       ("#F1A137", "#0A2138", "JS"),
+    "sh":       ("#9CA3AF", "#0A2138", "SH"),
+    "dbt":      ("#215470", "#ffffff", "DBT"),
+    "import":   ("#0A2138", "#B0BEC5", "IMP"),
+    "workflow": ("#0A2138", "#B0BEC5", "WF"),
+    "skipped":  ("#E5E7EB", "#9CA3AF", "–"),
+    "txt":      ("#E5E7EB", "#9CA3AF", "?"),
 }
 
 
@@ -491,8 +491,10 @@ def _safe_mermaid_label(text: str) -> str:
 def _mermaid_nodes(steps, prefix="") -> list[str]:
     """Recursively build Mermaid flowchart lines."""
     lines = []
+    step_ids = []
     for s in steps:
         step_id = f"STEP_{prefix}{s['step_num']}"
+        step_ids.append(step_id)
         safe_name = _safe_mermaid_label(s["name"])
 
         if s["type"] == "workflow":
@@ -513,6 +515,10 @@ def _mermaid_nodes(steps, prefix="") -> list[str]:
             lines.append(f'  {tbl_id}[("{_safe_mermaid_label(tbl)}")]')
             lines.append(f"  {step_id} --> {tbl_id}")
 
+    # Invisible links enforce left-to-right step ordering in the layout
+    for a, b in zip(step_ids, step_ids[1:]):
+        lines.append(f"  {a} ~~~ {b}")
+
     return lines
 
 
@@ -527,58 +533,104 @@ def generate_html(steps: list, workflow_name: str) -> str:
   <title>Data Map: {workflow_name}</title>
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <style>
+    *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
     body {{
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      max-width: 1200px; margin: 40px auto; padding: 0 24px;
-      color: #212529; background: #fff;
+      background: #fff;
+      color: #4B5563;
     }}
-    h1 {{ font-size: 1.6rem; border-bottom: 2px solid #dee2e6; padding-bottom: 8px; }}
-    h2 {{ font-size: 1.2rem; margin-top: 36px; color: #495057; }}
+    .report-header {{
+      background: linear-gradient(135deg, #058DC7 0%, #215470 55%, #0A2138 100%);
+      padding: 32px 40px 28px;
+    }}
+    .report-header h1 {{
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 6px;
+    }}
+    .report-header p {{
+      color: #B0BEC5;
+      font-size: 0.88rem;
+    }}
+    .content {{
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 32px 40px 48px;
+    }}
+    h2 {{
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #215470;
+      margin-top: 40px;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #E5E7EB;
+    }}
     table {{
-      width: 100%; border-collapse: collapse; font-size: 0.9rem;
-      margin-top: 12px;
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
     }}
     th {{
-      background: #343a40; color: #fff;
-      padding: 8px 12px; text-align: left;
+      background: #215470;
+      color: #fff;
+      padding: 10px 14px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 0.8rem;
     }}
-    td {{ padding: 7px 12px; border-bottom: 1px solid #dee2e6; vertical-align: top; }}
-    tr:hover td {{ background: #f8f9fa; }}
+    td {{
+      padding: 8px 14px;
+      border-bottom: 1px solid #E5E7EB;
+      vertical-align: top;
+    }}
+    tr:hover td {{ background: #f0f4f8; }}
     code {{
-      background: #e9ecef; padding: 1px 4px; border-radius: 3px;
-      font-size: 0.85em; white-space: nowrap;
+      background: #E5E7EB;
+      color: #215470;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: 0.82em;
+      white-space: nowrap;
     }}
-    .mermaid {{ margin-top: 16px; overflow-x: auto; }}
+    .mermaid {{ margin-top: 8px; overflow-x: auto; }}
   </style>
 </head>
 <body>
-  <h1>Data Map: {workflow_name}</h1>
-  <p style="color:#6c757d">Workflow ID: {WORKFLOW_ID}</p>
+  <div class="report-header">
+    <h1>Data Map: {workflow_name}</h1>
+    <p>Workflow ID: {WORKFLOW_ID}</p>
+  </div>
 
-  <h2>Step Summary</h2>
-  <table>
-    <thead>
-      <tr>
-        <th style="width:40px">#</th>
-        <th>Step</th>
-        <th style="width:60px">Type</th>
-        <th>Input Tables</th>
-        <th>Output Tables</th>
-      </tr>
-    </thead>
-    <tbody>
+  <div class="content">
+    <h2>Step Summary</h2>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:40px">#</th>
+          <th>Step</th>
+          <th style="width:64px">Type</th>
+          <th>Input Tables</th>
+          <th>Output Tables</th>
+        </tr>
+      </thead>
+      <tbody>
 {table_rows}
-    </tbody>
-  </table>
+      </tbody>
+    </table>
 
-  <h2>Data Lineage</h2>
-  <div class="mermaid">
+    <h2>Data Lineage</h2>
+    <div class="mermaid">
 flowchart LR
 {mermaid_body}
+    </div>
   </div>
 
   <script>
-    mermaid.initialize({{ startOnLoad: true, theme: "default" }});
+    mermaid.initialize({{ startOnLoad: true, theme: "neutral" }});
   </script>
 </body>
 </html>
