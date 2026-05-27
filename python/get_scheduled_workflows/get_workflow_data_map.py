@@ -6,22 +6,25 @@ For each step (Python, SQL, sub-workflow, etc.) the report lists which
 database tables are read (inputs) and which are written/created (outputs),
 then renders a Mermaid.js lineage flowchart.
 
-This script doesn't really handle complicated workflow patterns like dynamic table names
-or dbt models, but it should work reasonably well for straightforward ETL pipelines.
+SQL steps are parsed with regex (FROM/JOIN → inputs, INSERT/CREATE/UPDATE → outputs).
+Python, R, JS, and shell steps use Claude via AWS Bedrock to reason about arbitrary code,
+which handles dynamic table names and non-civis.io patterns that regex misses.
+If Bedrock is unavailable the script falls back to the original regex extractor.
 """
 
+import json
 import os
 import re
 import sys
+import boto3
+from botocore.config import Config
+import civis
 
-try:
-    import civis
-except ImportError:
-    print("ERROR: civis package not installed. Run: pip install civis")
-    sys.exit(1)
 
 # ── Config ────────────────────────────────────────────────────────────────────
-WORKFLOW_ID = int(os.environ.get("WORKFLOW_ID"))
+WORKFLOW_ID         = int(os.environ.get("WORKFLOW_ID"))
+BEDROCK_MODEL_ID    = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+BEDROCK_REGION_NAME = "us-east-1"
 # ─────────────────────────────────────────────────────────────────────────────
 
 # SQL keywords that appear after FROM/JOIN but are not table names
@@ -168,13 +171,89 @@ def extract_tables_from_python(text: str):
     return inputs, outputs
 
 
+def _create_bedrock_client():
+    aws_access_key = os.environ.get("AWS_ACCESS_KEY_ID")
+    aws_secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
+    cred_kwargs = {}
+    if aws_access_key and aws_secret_key:
+        cred_kwargs = {
+            "aws_access_key_id": aws_access_key,
+            "aws_secret_access_key": aws_secret_key,
+        }
+    return boto3.client(
+        "bedrock-runtime",
+        config=Config(read_timeout=120),
+        region_name=BEDROCK_REGION_NAME,
+        **cred_kwargs,
+    )
+
+
+def extract_tables_with_ai(text: str, file_type: str):
+    """Return (inputs, outputs) sets by asking Claude via Bedrock to analyse the script."""
+
+    prompt = (
+        f"You are a data lineage analyst.\n"
+        f"Analyse the following {file_type} script and identify every database table or file "
+        f"that is READ (inputs) and every table or file that is WRITTEN or CREATED (outputs).\n\n"
+        f"Guidelines:\n"
+        f"- Return table names in schema.table format where visible.\n"
+        f"- For Civis Platform scripts: civis.io.read_civis / read_civis_sql = input; "
+        f"civis.io.dataframe_to_civis / write_civis = output.\n"
+        f"- For pandas: read_sql / read_csv pointing to a table = input; to_sql = output.\n"
+        f"- For dynamic table names (f-strings, variables), make a best-guess using "
+        f"the surrounding context, or omit if unknowable.\n"
+        f"- Exclude temporary in-memory dataframes; only include persistent storage "
+        f"(databases, files written to disk/S3).\n\n"
+        f"Script ({file_type}):\n{text}"
+    )
+    body = json.dumps({
+        "anthropic_version": "bedrock-2023-05-31",
+        "max_tokens": 4096,
+        "temperature": 0,
+        "messages": [{"role": "user", "content": prompt}],
+        "tools": [{
+            "name": "return_data_lineage",
+            "description": "Return all input and output tables identified in the script.",
+            "input_schema": {
+                "type": "object",
+                "required": ["inputs", "outputs"],
+                "properties": {
+                    "inputs": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Tables/files read by this script",
+                    },
+                    "outputs": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Tables/files written by this script",
+                    },
+                },
+            },
+        }],
+        "tool_choice": {"type": "tool", "name": "return_data_lineage"},
+    })
+    bedrock = _create_bedrock_client()
+    response = bedrock.invoke_model(modelId=BEDROCK_MODEL_ID, body=body)
+    result = json.loads(response["body"].read())
+    data = result["content"][0]["input"]
+    inputs  = {t.lower() for t in data.get("inputs",  [])}
+    outputs = {t.lower() for t in data.get("outputs", [])}
+    inputs -= outputs  # in-place updates: keep in outputs only
+    return inputs, outputs
+
+
 def extract_tables(content: str, ext: str):
     """Dispatch to the right extractor based on file extension."""
     if ext == "sql":
         return extract_tables_from_sql(content)
-    if ext == "py":
-        return extract_tables_from_python(content)
-    return set(), set()
+    try:
+        return extract_tables_with_ai(content, ext)
+    except Exception as e:
+        print(f"  ⚠  AI extraction failed ({ext}): {e}; falling back to regex")
+        if ext == "py":
+            return extract_tables_from_python(content)
+        return set(), set()
 
 
 # ── Step collection ───────────────────────────────────────────────────────────
