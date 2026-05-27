@@ -175,6 +175,10 @@ def extract_tables_from_sql(text: str):
     # A table that is both read from and written to is an in-place update —
     # keep it in outputs only to avoid self-loops in the diagram.
     inputs -= outputs
+    # Only keep schema-qualified names (schema.table); bare words are column
+    # names, CTE aliases, or other artefacts, not real table references.
+    inputs  = {t for t in inputs  if "." in t}
+    outputs = {t for t in outputs if "." in t}
     return inputs, outputs
 
 
