@@ -1,6 +1,6 @@
 # This script fetches all Jobs that the runner has at least viewer access on,
-# and fetches the permission (sharing) information for each job. Results are saved in a Pandas dataframe,
-# then written to a Civis database table.
+# and fetches the permission (sharing) and notification settings for each job.
+# Results are saved in a Pandas dataframe, then written to a Civis database table.
 
 import civis
 import pandas as pd
@@ -20,18 +20,40 @@ TYPE_TO_SHARES = {
     "JobTypes::IdentityResolution": ("match_targets", "list_shares"),
 }
 
+TYPE_TO_DETAIL = {
+    "JobTypes::PythonDocker": ("scripts", "get_python3"),
+    "JobTypes::RDocker": ("scripts", "get_r"),
+    "JobTypes::ContainerDocker": ("scripts", "get_containers"),
+    "JobTypes::SqlRunner": ("scripts", "get_sql"),
+    "JobTypes::Import": ("imports", "get"),
+    "JobTypes::IdentityResolution": ("match_targets", "get"),
+}
+
 
 def get_shares(job_id, job_type):
+    """Return (shares, notifications) for the given job, or (None, None) for unsupported types."""
     if job_type not in TYPE_TO_SHARES:
-        return None
+        return None, None
 
-    resource_name, method_name = TYPE_TO_SHARES[job_type]
-    method = getattr(getattr(client, resource_name), method_name)
+    resource_name, shares_method = TYPE_TO_SHARES[job_type]
+    resource = getattr(client, resource_name)
+
+    shares = None
     try:
-        return method(job_id)
+        shares = getattr(resource, shares_method)(job_id)
     except Exception as e:
         _LOG.warning("Could not fetch shares for job %d (%s): %s", job_id, job_type, e)
-        return None
+
+    notifications = None
+    if job_type in TYPE_TO_DETAIL:
+        detail_method = TYPE_TO_DETAIL[job_type][1]
+        try:
+            detail = getattr(resource, detail_method)(job_id)
+            notifications = detail.notifications
+        except Exception as e:
+            _LOG.warning("Could not fetch notifications for job %d (%s): %s", job_id, job_type, e)
+
+    return shares, notifications
 
 
 def extract_names(obj, permission_level, kind):
@@ -52,7 +74,7 @@ jobs_iterator = client.jobs.list(iterator=True)
 
 rows = []
 for j in jobs_iterator:
-    shares = get_shares(j.id, j.type)
+    shares, notifications = get_shares(j.id, j.type)
 
     rows.append(
         {
@@ -98,12 +120,19 @@ for j in jobs_iterator:
             "writer_groups": extract_names(shares, "writers", "groups"),
             "owner_users": extract_names(shares, "owners", "users"),
             "owner_groups": extract_names(shares, "owners", "groups"),
+            # --- notifications ---
+            "notification_urls": str(notifications.urls) if notifications and notifications.urls else None,
+            "success_email_subject": notifications.success_email_subject if notifications else None,
+            "success_email_body": notifications.success_email_body if notifications else None,
+            "success_email_addresses": str(notifications.success_email_addresses) if notifications and notifications.success_email_addresses else None,
+            "success_email_from_name": notifications.success_email_from_name if notifications else None,
+            "failure_email_addresses": str(notifications.failure_email_addresses) if notifications and notifications.failure_email_addresses else None,
         }
     )
 
 df = pd.DataFrame(rows)
 _LOG.info(
-    "Loaded %d jobs with share data. Writing to %s.%s...", len(df), DATABASE, TABLE
+    "Loaded %d jobs with share and notification data. Writing to %s.%s...", len(df), DATABASE, TABLE
 )
 
 fut = civis.io.dataframe_to_civis(
