@@ -33,7 +33,7 @@ except ImportError:
 
 # ── Config ───────────────────────────────────────────────────────────────────
 WORKFLOW_ID = 4742
-OUTPUT_DIR  = f"workflow_{WORKFLOW_ID}_scripts"
+OUTPUT_DIR = f"workflow_{WORKFLOW_ID}_scripts"
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -47,27 +47,27 @@ def fetch_script_content(client, job_id: int):
     Returns (content: str, extension: str, job_name: str).
     """
     attempts = [
-        (client.scripts.get_python3,    "source",        "py"),
-        (client.scripts.get_sql,        "sql",           "sql"),
-        (client.scripts.get_r,          "source",        "r"),
-        (client.scripts.get_javascript, "source",        "js"),
-        (client.scripts.get_containers, "docker_command","sh"),
+        (client.scripts.get_python3, "source", "py"),
+        (client.scripts.get_sql, "sql", "sql"),
+        (client.scripts.get_r, "source", "r"),
+        (client.scripts.get_javascript, "source", "js"),
+        (client.scripts.get_containers, "docker_command", "sh"),
     ]
     for fetch_fn, content_field, ext in attempts:
         try:
-            job     = fetch_fn(job_id)
+            job = fetch_fn(job_id)
             content = getattr(job, content_field, None) or ""
-            name    = getattr(job, "name", f"job_{job_id}")
+            name = getattr(job, "name", f"job_{job_id}")
             return content, ext, name
         except Exception:
             continue  # wrong type — try next
 
     # Generic fallback
     try:
-        job      = client.jobs.get(job_id)
-        name     = getattr(job, "name", f"job_{job_id}")
+        job = client.jobs.get(job_id)
+        name = getattr(job, "name", f"job_{job_id}")
         job_type = getattr(job, "type", "unknown")
-        content  = (
+        content = (
             f"# Could not retrieve source automatically.\n"
             f"# Job type: {job_type}  |  Job name: {name}\n"
             f"# Visit: https://platform.civisanalytics.com/spa/#/scripts/{job_id}\n"
@@ -81,7 +81,9 @@ def fetch_script_content(client, job_id: int):
         )
 
 
-def process_execution(client, workflow_id: int, execution_id: int, output_dir: str, depth: int = 0):
+def process_execution(
+    client, workflow_id: int, execution_id: int, output_dir: str, depth: int = 0
+):
     """
     Recursively download all scripts for a workflow execution.
 
@@ -96,8 +98,10 @@ def process_execution(client, workflow_id: int, execution_id: int, output_dir: s
     try:
         execution = client.workflows.get_executions(workflow_id, execution_id)
     except Exception as e:
-        print(f"{indent}⚠  Could not fetch execution {execution_id} "
-              f"for workflow {workflow_id}: {e}")
+        print(
+            f"{indent}⚠  Could not fetch execution {execution_id} "
+            f"for workflow {workflow_id}: {e}"
+        )
         return
 
     tasks = execution.tasks or []
@@ -108,14 +112,14 @@ def process_execution(client, workflow_id: int, execution_id: int, output_dir: s
     os.makedirs(output_dir, exist_ok=True)
 
     for step_num, task in enumerate(tasks, start=1):
-        task_name  = task.name
-        safe_name  = safe_filename(task_name)
+        task_name = task.name
+        safe_name = safe_filename(task_name)
         step_label = f"step_{step_num:02d}_{safe_name}"
 
         # ── Find job_id from runs ────────────────────────────────────────────
         job_id = None
-        runs   = getattr(task, "runs", []) or []
-        for run in reversed(runs):           # most recent first
+        runs = getattr(task, "runs", []) or []
+        for run in reversed(runs):  # most recent first
             jid = getattr(run, "job_id", None)
             if jid:
                 job_id = jid
@@ -155,15 +159,14 @@ def process_execution(client, workflow_id: int, execution_id: int, output_dir: s
         try:
             content, ext, job_name = fetch_script_content(client, job_id)
         except Exception as e:
-            content  = f"# Unexpected error fetching script: {e}\n"
-            ext      = "txt"
+            content = f"# Unexpected error fetching script: {e}\n"
+            ext = "txt"
             job_name = task_name
 
         header = (
             f"# Step {step_num}: {task_name}\n"
             f"# Workflow ID: {workflow_id}  |  Execution ID: {execution_id}\n"
-            f"# Job ID: {job_id}  |  Job name: {job_name}\n"
-            + "#" + "─" * 68 + "\n\n"
+            f"# Job ID: {job_id}  |  Job name: {job_name}\n" + "#" + "─" * 68 + "\n\n"
         )
 
         filename = f"{step_label}.{ext}"
@@ -200,10 +203,10 @@ def main():
     print(f"Downloading to ./{OUTPUT_DIR}/\n")
     process_execution(
         client,
-        workflow_id  = WORKFLOW_ID,
-        execution_id = workflow.last_execution_id,
-        output_dir   = OUTPUT_DIR,
-        depth        = 0,
+        workflow_id=WORKFLOW_ID,
+        execution_id=workflow.last_execution_id,
+        output_dir=OUTPUT_DIR,
+        depth=0,
     )
 
     print(f"\nDone. Output is in ./{OUTPUT_DIR}/")
