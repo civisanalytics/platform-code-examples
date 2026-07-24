@@ -8,8 +8,7 @@ scripts are downloaded recursively into it.
 Usage:
     pip install civis
     export CIVIS_API_KEY="your_api_key"
-    python download_workflow_scripts.py
-
+    python get_platform_workflow_code.py
 Output:
     workflow_4742_scripts/
         step_01_<name>/          ← sub-workflow → becomes a folder
@@ -163,17 +162,19 @@ def process_execution(
             ext = "txt"
             job_name = task_name
 
+        comment_prefix = {"sql": "--", "js": "//"}.get(ext, "#")
+        divider = f"{comment_prefix}{'-' * 68}"
         header = (
-            f"# Step {step_num}: {task_name}\n"
-            f"# Workflow ID: {workflow_id}  |  Execution ID: {execution_id}\n"
-            f"# Job ID: {job_id}  |  Job name: {job_name}\n" + "#" + "─" * 68 + "\n\n"
+            f"{comment_prefix} Step {step_num}: {task_name}\n"
+            f"{comment_prefix} Workflow ID: {workflow_id}  |  Execution ID: {execution_id}\n"
+            f"{comment_prefix} Job ID: {job_id}  |  Job name: {job_name}\n"
+            f"{divider}\n\n"
         )
 
         filename = f"{step_label}.{ext}"
         filepath = os.path.join(output_dir, filename)
         with open(filepath, "w", encoding="utf-8") as f:
-            f.write(header + (content or "# (empty source)\n"))
-
+            f.write(header + (content or f"{comment_prefix} (empty source)\n"))
         print(f"{indent}[{step_num:>2}] ✓  {filename}")
 
 
