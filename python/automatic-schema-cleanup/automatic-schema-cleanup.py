@@ -121,7 +121,10 @@ def main():
     dry_run = os.environ["DRY_RUN"] == "true"
     skip_scans = os.environ["SKIP_SCANS"] == "true"
 
-    pattern = re.compile(regex) if regex else None
+    try:
+        pattern = re.compile(regex) if regex else None
+    except re.error as exc:
+        raise ValueError(f"Invalid REGEX {regex!r}: {exc}") from exc
     cutoff = datetime.now(timezone.utc)
 
     if dry_run:
