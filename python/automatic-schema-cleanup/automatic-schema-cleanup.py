@@ -164,7 +164,7 @@ def main():
     if skipped_unknown_age:
         logger.warning(
             f"Skipping {len(skipped_unknown_age)} table(s) with no last-touched "
-            f"value tables API : {', '.join(skipped_unknown_age)}"
+            f"value from tables API: {', '.join(skipped_unknown_age)}"
         )
 
     logger.info(f"{len(to_drop)} table(s) are older than {days} day(s):")
