@@ -1,0 +1,28 @@
+version: '2.0'
+workflow:
+  type: direct
+  tasks:
+    cass_ncoa:
+      action: civis.run_job
+      input:
+        job_id: 365972621
+      on-success: ETL_Before_Geocoding
+    Geocoding:
+      action: civis.run_job
+      input:
+        job_id: 365973532
+      on-success: Join_All_Data
+    ETL_Before_Cass_NCOA:
+      action: civis.run_job
+      input:
+        job_id: 366099812
+      on-success: cass_ncoa
+    ETL_Before_Geocoding:
+      action: civis.run_job
+      input:
+        job_id: 365973748
+      on-success: Geocoding
+    Join_All_Data:
+      action: civis.run_job
+      input:
+        job_id: 365973236
