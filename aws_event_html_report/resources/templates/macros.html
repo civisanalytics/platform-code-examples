@@ -1,0 +1,24 @@
+{# resources/templates/macros.html
+   Reusable Jinja fragments, importable from any template:
+     {% import "macros.html" as macros %}
+     {{ macros.data_table(columns, rows) }}
+   Add more here as shared presentational patterns come up (tables, badges,
+   chart embeds, etc) - this is where reusable View-layer markup lives so it
+   doesn't get duplicated across card.html / section.html / new templates. #}
+
+{% macro data_table(columns, rows) %}
+<table class="data-table">
+  <thead>
+    <tr>
+      {% for col in columns %}<th>{{ col }}</th>{% endfor %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      {% for cell in row %}<td>{{ cell }}</td>{% endfor %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endmacro %}

@@ -1,0 +1,42 @@
+{# resources/templates/calendar_section.html
+   GitHub-style heatmap calendar, paired with CalendarSection in
+   report_builder.py. `data` is the list of month dicts from
+   build_calendar_months() (each: "label" + "weeks", weeks of 7 day-cells
+   with day/count/level already computed in Python - "level" is a 0-4
+   shading bucket this template just maps to a CSS class, no day-count
+   math happens here). `weekday_labels` is the Sunday-first header row. #}
+<section class="section">
+  {% if title %}<h2 class="section-title">{{ title }}</h2>{% endif %}
+  <div class="section-body">
+    <div class="calendar-legend">
+      <span>Fewer events</span>
+      <span class="legend-swatch level-0"></span>
+      <span class="legend-swatch level-1"></span>
+      <span class="legend-swatch level-2"></span>
+      <span class="legend-swatch level-3"></span>
+      <span class="legend-swatch level-4"></span>
+      <span>More events</span>
+    </div>
+    <div class="calendar-grid">
+      {% for month in data %}
+      <div class="calendar-month">
+        <div class="calendar-month-title">{{ month.label }}</div>
+        <div class="calendar-weekdays">
+          {% for w in weekday_labels %}<span>{{ w }}</span>{% endfor %}
+        </div>
+        <div class="calendar-days">
+          {% for week in month.weeks %}
+            {% for cell in week %}
+              {% if cell is none %}
+                <div class="calendar-day empty"></div>
+              {% else %}
+                <div class="calendar-day level-{{ cell.level }}" title="{{ cell.count }} event{{ 's' if cell.count != 1 else '' }}">{{ cell.day }}</div>
+              {% endif %}
+            {% endfor %}
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>

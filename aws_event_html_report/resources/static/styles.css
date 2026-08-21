@@ -1,0 +1,186 @@
+/* Civis Analytics brand colors, applied in the practical dashboard style
+   used across existing Civis HTML reports (slate chrome, system UI font -
+   no external font request needed). Colors: Navy #215470, Night #0A2138,
+   Night Gray #4B5563, Teal #0097A7, Amber #F1A137, Blue #058DC7. */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #F8FAFC;
+  color: #334155;
+}
+
+.report-header {
+  background: #0A2138;
+  color: #F1F5F9;
+  padding: 20px 32px;
+}
+
+.report-header h1 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.report-subtitle {
+  font-size: 0.8rem;
+  color: #94A3B8;
+  margin-top: 4px;
+}
+
+.report-body {
+  padding: 28px 32px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.section {
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  padding: 22px 24px;
+  margin-bottom: 24px;
+}
+
+.section-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #1E293B;
+  margin: 0 0 12px;
+}
+
+.section-body p {
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: #334155;
+}
+
+.card {
+  display: inline-block;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  padding: 16px 20px;
+  min-width: 200px;
+  margin: 0 16px 24px 0;
+  vertical-align: top;
+}
+
+.card-label {
+  font-size: 0.85rem;
+  color: #64748B;
+  font-weight: 500;
+}
+
+.card-value {
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: #1E293B;
+  margin-top: 6px;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  margin-top: 14px;
+}
+
+.data-table th {
+  background: #F1F5F9;
+  text-align: left;
+  padding: 7px 12px;
+  border-bottom: 2px solid #E5E7EB;
+  font-weight: 600;
+  color: #1E293B;
+}
+
+.data-table td {
+  padding: 6px 12px;
+  border-bottom: 1px solid #F1F5F9;
+  color: #334155;
+}
+
+.data-table tr:last-child td {
+  border-bottom: none;
+}
+
+.data-table tr:nth-child(even) td {
+  background: #F8FAFC;
+}
+
+.calendar-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: #64748B;
+  margin-bottom: 16px;
+}
+
+.legend-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 20px;
+}
+
+.calendar-month-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #1E293B;
+  margin-bottom: 8px;
+}
+
+.calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+  font-size: 0.65rem;
+  color: #94A3B8;
+  text-align: center;
+  margin-bottom: 4px;
+}
+
+.calendar-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+}
+
+.calendar-day {
+  aspect-ratio: 1;
+  border-radius: 3px;
+  font-size: 0.65rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #94A3B8;
+}
+
+.calendar-day.empty {
+  background: transparent;
+}
+
+.calendar-day.level-0, .legend-swatch.level-0 { background: #F1F5F9; }
+.calendar-day.level-1, .legend-swatch.level-1 { background: #B4E4EA; color: #0A2138; }
+.calendar-day.level-2, .legend-swatch.level-2 { background: #6FCBD6; color: #0A2138; }
+.calendar-day.level-3, .legend-swatch.level-3 { background: #0097A7; color: #F8FAFC; }
+.calendar-day.level-4, .legend-swatch.level-4 { background: #0A6E78; color: #F8FAFC; }
+
+.report-footer {
+  padding: 16px 32px;
+  color: #94A3B8;
+  font-size: 0.75rem;
+}

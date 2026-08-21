@@ -1,0 +1,15 @@
+{# resources/templates/section.html
+   Generic section wrapper, paired with the Section class in
+   report_utils.py. `body` is plain text passed straight through (see
+   TextSection in report_builder.py); `children` are any nested Card/Section
+   HTML already rendered by Python. A section can use `body`, `children`,
+   both, or neither. #}
+<section class="section">
+  {% if title %}<h2 class="section-title">{{ title }}</h2>{% endif %}
+  <div class="section-body">
+    {% if body %}<p>{{ body }}</p>{% endif %}
+    {% for child_html in children %}
+      {{ child_html | safe }}
+    {% endfor %}
+  </div>
+</section>

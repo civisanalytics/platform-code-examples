@@ -1,0 +1,9 @@
+{# resources/templates/card.html
+   Generic card, paired with the Card class in report_utils.py. label/value
+   match MetricCard in report_builder.py - give a Card subclass different
+   context keys (and add a new template) for other card types: a chart
+   card, a table card (see macros.html), etc. #}
+<div class="card">
+  {% if label %}<div class="card-label">{{ label }}</div>{% endif %}
+  <div class="card-value">{{ value }}</div>
+</div>
