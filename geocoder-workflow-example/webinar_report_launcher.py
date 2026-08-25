@@ -623,6 +623,32 @@ def load_sql(sql: str, database: str) -> pd.DataFrame:
     return civis.io.read_civis_sql(sql, database=database, return_as="pandas")
 
 
+def ensure_report_id_param(client: civis.APIClient, job_id: int) -> None:
+    """Make sure this Python Script has a REPORT_ID parameter defined,
+    adding it if it's missing. Civis Platform requires a parameter to be
+    declared via `params` before an `arguments` value for that key is
+    recognized - passing arguments={"REPORT_ID": ...} to patch_python3
+    without REPORT_ID ever appearing in `params` does not create a usable
+    script parameter (see Civis's Script Parameters docs: `params` defines
+    the parameter, `arguments` sets its value for a parameter that already
+    exists). Without this, the REPORT_ID argument set below never turns
+    into an environment variable on the next run, so publish_report() would
+    take the "create new report" branch every run instead of updating the
+    same report. This only ensures the parameter definition exists; it does
+    not set a value - the patch_python3(arguments=...) call right after it
+    still does that."""
+    script = client.scripts.get_python3(job_id)
+    existing_params = [dict(p) for p in (script.params or [])]
+    if any(p.get("name") == "REPORT_ID" for p in existing_params):
+        return
+    client.scripts.patch_python3(
+        id=job_id,
+        params=existing_params + [
+            {"name": "REPORT_ID", "type": "integer", "required": False}
+        ],
+    )
+
+
 def publish_report(
     html: str,
     report_name: str,
@@ -655,6 +681,7 @@ def publish_report(
             report = client.reports.post(
                 name=report_name, description=report_desc, code_body=html
             )
+            ensure_report_id_param(client, job_id)
             client.scripts.patch_python3(
                 id=job_id, arguments={"REPORT_ID": int(report.id)}
             )
