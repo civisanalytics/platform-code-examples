@@ -26,3 +26,13 @@ workflow:
       action: civis.run_job
       input:
         job_id: 365973236
+      on-success: Create_Map_Table
+    Create_Map_Table:
+      action: civis.run_job
+      input:
+        job_id: 366806110
+      on-success: Refresh_Report
+    Refresh_Report:
+      action: civis.run_job
+      input:
+        job_id: 365983394
