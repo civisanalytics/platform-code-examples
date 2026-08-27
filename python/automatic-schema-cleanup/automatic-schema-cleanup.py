@@ -36,8 +36,8 @@ Parameters (env vars):
                                     days
   REGEX         (str, optional)  - if set, only tables whose name matches
                                     this regex (re.search) are considered
-  DATABASE_ID   (int, required)  - Civis database ID the schema lives in
-  CREDENTIAL_ID (int, optional)  - Civis credential ID to run as; defaults
+  DB_ID   (int, required)  - Civis database ID the schema lives in
+  DB_CREDENTIAL_ID (int, optional)  - Civis credential ID to run as; defaults
                                     to the account's default database
                                     credential
   DRY_RUN       (bool, optional) - default true. Logs what would be dropped
