@@ -661,7 +661,7 @@ def build_client_script(calendar_time_zone="local"):
         succeeded: 'Succeeded', failed: 'Failed', running: 'Running',
         cancelled: 'Cancelled', scheduled: 'Scheduled'
     };
-    var currentViewType = 'dayGridMonth';
+    var currentViewType = 'timeGridWeek';
     var searchQuery = '';
     var hiddenStates = {};
 
