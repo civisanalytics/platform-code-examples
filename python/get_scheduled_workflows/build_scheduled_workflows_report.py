@@ -957,9 +957,11 @@ def build_client_script(calendar_time_zone=DISPLAY_TIME_ZONE):
             chip.className = 'filter-chip';
             chip.innerHTML = '<span class="dot" style="background:' + STATE_COLORS[bucket] +
                 '"></span>' + escapeHtml(STATE_LABELS[bucket]);
+            chip.setAttribute('aria-pressed', 'true');
             chip.onclick = function () {
                 hiddenStates[bucket] = !hiddenStates[bucket];
                 chip.classList.toggle('off', !!hiddenStates[bucket]);
+                chip.setAttribute('aria-pressed', String(!hiddenStates[bucket]));
                 cal.refetchEvents();
             };
             container.appendChild(chip);
