@@ -1037,7 +1037,7 @@ def build_html(calendar_events, everyday_cards_html, job_id, generated_at=""):
 </details>
 
 <div id="controls">
-    <input type="text" id="search-box" placeholder="Search workflows by name..." />
+    <input type="text" id="search-box" aria-label="Search workflows by name" placeholder="Search workflows by name..." />
     <div id="status-filters"></div>
 </div>
 
