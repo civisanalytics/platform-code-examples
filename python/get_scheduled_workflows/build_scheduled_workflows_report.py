@@ -1,4 +1,3 @@
-import calendar
 import html as html_lib
 import os
 from datetime import datetime, timedelta, timezone
@@ -7,6 +6,35 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 EVERYDAY_SCHEDULED_DAYS = list(range(7))
+
+# How far back to load real executions, and how far ahead to project scheduled runs.
+LOOKBACK_DAYS = 60
+FORWARD_DAYS = 45
+# Executions that finish in seconds would be invisible slivers in the week/day views,
+# so give every event at least this much height (true runtime is kept separately).
+MIN_DISPLAY_DURATION = timedelta(minutes=15)
+FAILURE_STATES = {"failed", "cancelled"}
+
+PLATFORM_URL = "https://platform.civisanalytics.com/spa/#"
+
+# Time zone the report is displayed in (calendar, event details, "generated at").
+# Use any IANA name, e.g. "America/Chicago", "America/New_York", "UTC".
+# Display only: each workflow's own schedule time zone is unchanged.
+DISPLAY_TIME_ZONE = "America/Chicago"
+DISPLAY_ZONEINFO = ZoneInfo(DISPLAY_TIME_ZONE)  # fails fast on a bad name
+
+
+def workflow_url(workflow_id):
+    return f"{PLATFORM_URL}/workflows/{workflow_id}"
+
+
+def execution_url(workflow_id, execution_id):
+    # UNVERIFIED pattern: confirm against a real execution page in platform.
+    return f"{PLATFORM_URL}/workflows/{workflow_id}/executions/{execution_id}"
+
+
+def job_url(job_id):
+    return f"{PLATFORM_URL}/jobs/{job_id}"
 
 
 # ---------------------------------------------------------------------------
@@ -137,56 +165,49 @@ def execution_reference_time(execution):
 
 
 def normalize_execution(execution):
+    started_at = parse_api_datetime(execution.get("started_at"))
+    finished_at = parse_api_datetime(execution.get("finished_at"))
+    duration_seconds = (
+        (finished_at - started_at).total_seconds() if started_at and finished_at else None
+    )
     return {
         "id": execution.get("id"),
         "state": normalize_execution_state(execution),
+        "state_info": str(execution.get("mistral_state_info") or ""),
         "reference_at": execution_reference_time(execution),
         "started_at": str(execution.get("started_at", "") or ""),
         "finished_at": str(execution.get("finished_at", "") or ""),
         "created_at": str(execution.get("created_at", "") or ""),
+        "duration_seconds": duration_seconds,
+        "tasks": [],
     }
 
 
-def workflow_occurrence_times(ws, year, month):
-    month_days = [d for d in calendar.Calendar().itermonthdates(year, month) if d.month == month]
+def workflow_occurrence_times(ws, range_start, range_end):
+    """Scheduled run times for every date from range_start to range_end (inclusive)."""
+    days = [range_start + timedelta(days=i) for i in range((range_end - range_start).days + 1)]
     tzinfo = get_workflow_zoneinfo(ws)
     scheduled_days = set(ws.get("scheduled_days", []))
     days_of_month = ws.get("scheduled_days_of_month", [])
     occurrences = []
 
     if scheduled_days:
-        for day in month_days:
+        for day in days:
             civis_weekday = (day.weekday() + 1) % 7  # Civis: 0=Sun
             if civis_weekday in scheduled_days:
                 for hour, minute in event_time_pairs(ws):
                     occurrences.append(
-                        datetime(
-                            day.year,
-                            day.month,
-                            day.day,
-                            hour,
-                            minute,
-                            tzinfo=tzinfo,
-                        )
+                        datetime(day.year, day.month, day.day, hour, minute, tzinfo=tzinfo)
                     )
     elif days_of_month:
-        for dom in days_of_month:
-            try:
-                event_date = datetime(year, month, dom, tzinfo=tzinfo)
-            except ValueError:
-                continue
-            for hour, minute in event_time_pairs(ws):
-                occurrences.append(event_date + timedelta(hours=hour, minutes=minute))
+        for day in days:
+            if day.day in days_of_month:
+                for hour, minute in event_time_pairs(ws):
+                    occurrences.append(
+                        datetime(day.year, day.month, day.day, hour, minute, tzinfo=tzinfo)
+                    )
 
     return sorted(occurrences)
-
-
-def workflow_execution_fetch_window(occurrence_times):
-    if not occurrence_times:
-        return None, None
-    start_utc = occurrence_times[0].astimezone(timezone.utc) - timedelta(minutes=30)
-    end_utc = occurrence_times[-1].astimezone(timezone.utc) + timedelta(days=2)
-    return start_utc, end_utc
 
 
 def fetch_workflow_executions(client, workflow_id, window_start_utc, window_end_utc):
@@ -231,6 +252,34 @@ def fetch_workflow_executions(client, workflow_id, window_start_utc, window_end_
     return executions
 
 
+def fetch_execution_tasks(client, workflow_id, execution_id):
+    # One extra API call per execution, so only used for failed/cancelled runs.
+    detail = client.workflows.get_executions(workflow_id, execution_id)
+    tasks = []
+    for task in detail.get("tasks") or []:
+        runs = task.get("runs") or []
+        latest_run = runs[0] if runs else {}
+        started_at = parse_api_datetime(latest_run.get("started_at"))
+        finished_at = parse_api_datetime(latest_run.get("finished_at"))
+        tasks.append(
+            {
+                "name": str(task.get("name", "")),
+                "state": str(task.get("mistral_state") or ""),
+                "stateInfo": str(task.get("mistral_state_info") or ""),
+                "jobId": latest_run.get("job_id"),
+                "jobUrl": job_url(latest_run["job_id"]) if latest_run.get("job_id") else "",
+                "runId": latest_run.get("id"),
+                "runState": str(latest_run.get("state") or ""),
+                "durationSeconds": (
+                    (finished_at - started_at).total_seconds()
+                    if started_at and finished_at
+                    else None
+                ),
+            }
+        )
+    return tasks
+
+
 def execution_state_color(state):
     normalized_state = str(state or "").strip().lower()
     if normalized_state == "failed":
@@ -265,94 +314,63 @@ def format_execution_state_label(state):
     return normalized_state.title()
 
 
-def match_executions_to_occurrences(occurrence_times, executions, now_utc):
-    matched = [None] * len(occurrence_times)
-    occurrence_times_utc = [occurrence.astimezone(timezone.utc) for occurrence in occurrence_times]
-    grace_period = timedelta(minutes=30)
-
-    # Attribute each execution to the most recent scheduled slot before it,
-    # while leaving future occurrences uncolored until they actually run.
-    for execution in sorted(
-        executions,
-        key=lambda item: item["reference_at"] or datetime.min.replace(tzinfo=timezone.utc),
-    ):  # W503
-        reference_at = execution.get("reference_at")
-        if reference_at is None:
-            continue
-        target_index = -1
-        for index, occurrence_utc in enumerate(occurrence_times_utc):
-            if occurrence_utc <= reference_at + grace_period:
-                target_index = index
-            else:
-                break
-        if target_index < 0:
-            continue
-
-        next_occurrence_utc = (
-            occurrence_times_utc[target_index + 1]
-            if target_index + 1 < len(occurrence_times_utc)
-            else occurrence_times_utc[target_index] + timedelta(days=2)
-        )
-        if reference_at >= next_occurrence_utc:
-            continue
-        if occurrence_times_utc[target_index] > now_utc:
-            continue
-        matched[target_index] = execution
-
-    return matched
-
-
-def workflow_event_metadata(ws, event_state, matched_execution):
-    workflow_url = f"https://platform.civisanalytics.com/spa/#/workflows/{ws['id']}"
+def workflow_event_metadata(ws):
     return {
         "workflowId": ws["id"],
-        "workflowUrl": workflow_url,
-        "url": workflow_url,
+        "workflowUrl": workflow_url(ws["id"]),
         "scheduleText": schedule_to_string(ws),
         "timeZone": ws.get("time_zone", "UTC"),
         "createdAt": ws.get("created_at", ""),
         "nextExecutionAt": ws.get("next_execution_at", ""),
-        "state": event_state,
-        "matchedExecutionStartedAt": (
-            matched_execution.get("started_at", "") if matched_execution else ""
-        ),
-        "matchedExecutionFinishedAt": (
-            matched_execution.get("finished_at", "") if matched_execution else ""
-        ),
+        # Everyday workflows are hidden from the month grid but shown in week/day views.
+        "everyday": set(ws["scheduled_days"]) == set(EVERYDAY_SCHEDULED_DAYS),
     }
 
 
 # ---------------------------------------------------------------------------
 # Build calendar events for FullCalendar
 # ---------------------------------------------------------------------------
-def build_calendar_events(workflows, year, month, workflow_executions=None, now_utc=None):
-    workflow_executions = workflow_executions or {}
-    now_utc = now_utc or datetime.now(timezone.utc)
+def build_calendar_events(workflows, workflow_executions, range_start, range_end, now_utc):
+    """Real executions (with true runtime/status) plus upcoming scheduled runs."""
     events = []
     for ws in workflows:
-        occurrence_times = workflow_occurrence_times(ws, year, month)
-        matched_executions = match_executions_to_occurrences(
-            occurrence_times,
-            workflow_executions.get(ws["id"], []),
-            now_utc,
-        )
+        metadata = workflow_event_metadata(ws)
 
-        for occurrence_time, matched_execution in zip(
-            occurrence_times,
-            matched_executions,
-        ):
-            occurrence_time_utc = occurrence_time.astimezone(timezone.utc)
-            event_state = (
-                matched_execution["state"]
-                if matched_execution is not None and occurrence_time_utc <= now_utc
-                else "scheduled"
+        for execution in workflow_executions.get(ws["id"], []):
+            start = execution["reference_at"]
+            finished = parse_api_datetime(execution["finished_at"])
+            end = max(finished or now_utc, start + MIN_DISPLAY_DURATION)
+            events.append(
+                {
+                    "title": ws["name"],
+                    "start": start.isoformat(),
+                    "end": end.isoformat(),
+                    "color": execution_state_color(execution["state"]),
+                    **metadata,
+                    "kind": "execution",
+                    "state": execution["state"],
+                    "executionId": execution["id"],
+                    "executionUrl": execution_url(ws["id"], execution["id"]),
+                    "startedAt": execution["started_at"],
+                    "finishedAt": execution["finished_at"],
+                    "durationSeconds": execution["duration_seconds"],
+                    "stateInfo": execution["state_info"],
+                    "tasks": execution["tasks"],
+                }
             )
+
+        for occurrence_time in workflow_occurrence_times(ws, range_start, range_end):
+            # Past slots are represented by the executions above, not projected.
+            if occurrence_time.astimezone(timezone.utc) <= now_utc:
+                continue
             events.append(
                 {
                     "title": ws["name"],
                     "start": occurrence_time.isoformat(),
-                    "color": execution_state_color(event_state),
-                    **workflow_event_metadata(ws, event_state, matched_execution),
+                    "color": execution_state_color("scheduled"),
+                    **metadata,
+                    "kind": "scheduled",
+                    "state": "scheduled",
                 }
             )
     return events
@@ -366,9 +384,7 @@ def build_everyday_cards(everyday_workflows, most_recent_states=None):
     cards = []
     for ws in everyday_workflows:
         workflow_name = str(ws.get("name", ""))
-        workflow_url = html_lib.escape(
-            f"https://platform.civisanalytics.com/spa/#/workflows/{ws.get('id', '')}"
-        )
+        workflow_link = html_lib.escape(workflow_url(ws.get("id", "")))
         workflow_name_lower = html_lib.escape(workflow_name.lower(), quote=True)
         workflow_name_html = html_lib.escape(workflow_name)
         schedule_html = html_lib.escape(schedule_to_string(ws))
@@ -378,7 +394,7 @@ def build_everyday_cards(everyday_workflows, most_recent_states=None):
         state_label_html = html_lib.escape(format_execution_state_label(most_recent_state))
         cards.append(
             f"<div class='workflow-card' data-wfname=\"{workflow_name_lower}\">"
-            f"  <div><b>Name:</b> <a href='{workflow_url}' target='_blank' "
+            f"  <div><b>Name:</b> <a href='{workflow_link}' target='_blank' "
             f"rel='noopener noreferrer'>{workflow_name_html}</a></div>"
             f"  <div class='workflow-meta'><b>Schedule:</b> {schedule_html}</div>"
             f"  <div class='workflow-meta'><b>Most recent run state:</b> "
@@ -405,31 +421,79 @@ def build_html_styles():
             margin: 0;
             padding: 0 0 60px;
         }
-        h1 {
+        #page-header {
+            background: linear-gradient(135deg, #2a4d69, #20639b);
+            color: #fff;
+            padding: 28px 24px 24px;
             text-align: center;
-            margin: 30px 0 0;
-            font-size: 2.2em;
-            color: #2a4d69;
-            letter-spacing: 1px;
         }
+        h1 {
+            margin: 0;
+            font-size: 2em;
+            letter-spacing: 0.5px;
+        }
+        .subtitle { margin: 6px 0 0; opacity: 0.85; font-size: 0.95em; }
+
+        #summary-tiles {
+            max-width: 1000px;
+            margin: -18px auto 0;
+            padding: 0 16px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 12px;
+        }
+        .tile {
+            background: #fff;
+            border-radius: 10px;
+            padding: 12px 16px;
+            box-shadow: 0 2px 10px rgba(42,77,105,0.12);
+            border-top: 4px solid #b5c6d6;
+        }
+        .tile .tile-value { font-size: 1.7em; font-weight: 700; color: #2a4d69; }
+        .tile .tile-label { font-size: 0.85em; color: #667; }
 
         #explanation {
-            max-width: 900px;
-            margin: 24px auto 0;
+            max-width: 968px;
+            margin: 20px auto 0;
             background: #eaf1fb;
             border-radius: 8px;
-            padding: 16px 24px;
-            font-size: 1.05em;
+            padding: 10px 20px;
             color: #234;
-            box-shadow: 0 1px 6px rgba(42,77,105,0.06);
             line-height: 1.6;
         }
+        #explanation summary { cursor: pointer; font-weight: 700; color: #2a4d69; }
+
+        #controls {
+            max-width: 1000px;
+            margin: 20px auto 0;
+            padding: 0 16px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .filter-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-left: 6px;
+            padding: 5px 12px;
+            border: 1px solid #b5c6d6;
+            border-radius: 999px;
+            background: #fff;
+            font: inherit;
+            font-size: 0.9em;
+            cursor: pointer;
+        }
+        .filter-chip.active { border-color: #2a4d69; background: #e8f0f7; font-weight: 600; }
+        .fc-event.dimmed { opacity: 0.2; }
+        .filter-chip .dot { width: 10px; height: 10px; border-radius: 50%; }
 
         #search-box {
             display: block;
-            margin: 24px auto 0;
+            flex: 1 1 260px;
             max-width: 400px;
-            width: 100%;
             padding: 10px 16px;
             font-size: 1.05em;
             border: 1px solid #b5c6d6;
@@ -444,7 +508,7 @@ def build_html_styles():
 
         #calendar {
             max-width: 1000px;
-            margin: 32px auto 0;
+            margin: 16px auto 0;
             padding: 16px;
             background: #fff;
             border-radius: 12px;
@@ -524,7 +588,7 @@ def build_html_styles():
         .modal-content {
             background: #fff;
             border-radius: 10px;
-            max-width: 600px;
+            max-width: 720px;
             margin: 60px auto;
             padding: 32px 28px 24px;
             box-shadow: 0 4px 24px rgba(42,77,105,0.18);
@@ -535,181 +599,483 @@ def build_html_styles():
             color: #2a4d69;
         }
         .modal-content ul { padding-left: 18px; }
+        .modal-content:focus { outline: none; }
         .close-btn {
             position: absolute;
             top: 12px;
             right: 18px;
+            padding: 0 4px;
+            background: none;
+            border: 0;
             font-size: 1.5em;
             color: #888;
             cursor: pointer;
             line-height: 1;
         }
         .close-btn:hover { color: #2a4d69; }
+        .close-btn:focus-visible { outline: 2px solid #2a4d69; outline-offset: 2px; }
+
+        .status-pill {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 999px;
+            color: #fff;
+            font-size: 0.85em;
+            font-weight: 700;
+            vertical-align: middle;
+            margin-left: 8px;
+        }
+        .detail-links { margin: 12px 0 4px; }
+        .detail-links a {
+            display: inline-block;
+            margin-right: 8px;
+            padding: 6px 12px;
+            border: 1px solid #20639b;
+            border-radius: 6px;
+            color: #20639b;
+            text-decoration: none;
+            font-size: 0.9em;
+        }
+        .detail-links a:hover { background: #20639b; color: #fff; }
+        .task-table a { color: #20639b; }
+        .task-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.92em;
+        }
+        .task-table th, .task-table td {
+            text-align: left;
+            padding: 6px 8px;
+            border-bottom: 1px solid #e0e6ed;
+        }
+        .task-table tr.task-failed td { background: #fdecea; color: #922b21; font-weight: 500; }
+        .task-table tr.task-info td { background: #fdf6f5; }
+        .task-table pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-size: 0.9em;
+        }
     </style>
     """
 
 
-def build_client_script(calendar_time_zone="local"):
-    return f"""
+def build_client_script(calendar_time_zone=DISPLAY_TIME_ZONE):
+    # Plain string (not an f-string) so the JavaScript braces don't need escaping.
+    script = """
 <script>
-(function () {{
+(function () {
     var eventsDataEl = document.getElementById('events-data');
     var ALL_EVENTS = JSON.parse(eventsDataEl ? eventsDataEl.textContent : '[]');
+    var STATE_COLORS = __STATE_COLORS__;
+    var STATE_LABELS = {
+        succeeded: 'Succeeded', failed: 'Failed', running: 'Running',
+        cancelled: 'Cancelled', scheduled: 'Scheduled'
+    };
+    var currentViewType = 'timeGridWeek';
+    var searchQuery = '';
+    var highlightedState = null;
+
+    // Queued/paused runs are grouped with running for the legend and filters.
+    function stateBucket(state) {
+        return (state === 'queued' || state === 'paused') ? 'running' : state;
+    }
 
     var tooltip = document.createElement('div');
     tooltip.className = 'wf-tooltip';
     document.body.appendChild(tooltip);
 
-    function escapeHtml(value) {{
-        return String(value || '')
+    function escapeHtml(value) {
+        return String(value === null || value === undefined ? '' : value)
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
-    }}
+    }
 
-    function safeExternalUrl(value) {{
+    function safeExternalUrl(value) {
         if (!value) return '';
-        try {{
+        try {
             var url = new URL(String(value), window.location.origin);
             if (url.protocol === 'http:' || url.protocol === 'https:') return url.toString();
-        }} catch (err) {{
+        } catch (err) {
             return '';
-        }}
+        }
         return '';
-    }}
+    }
 
-    function buildEventHtml(event) {{
-        var props = event.extendedProps || {{}};
+    function formatDuration(seconds) {
+        if (seconds === null || seconds === undefined || seconds === '') return 'n/a';
+        var total = Math.round(Number(seconds));
+        var h = Math.floor(total / 3600);
+        var m = Math.floor((total % 3600) / 60);
+        var s = total % 60;
+        if (h) return h + 'h ' + m + 'm ' + s + 's';
+        if (m) return m + 'm ' + s + 's';
+        return s + 's';
+    }
+
+    function formatTimestamp(value) {
+        if (!value) return 'n/a';
+        var d = new Date(value);
+        return isNaN(d.getTime()) ? String(value) : d.toLocaleString(undefined, {
+            timeZone: '__CALENDAR_TIME_ZONE__',
+            timeZoneName: 'short'
+        });
+    }
+
+    function stateLabel(state) {
+        var text = String(state || 'scheduled');
+        return text.charAt(0).toUpperCase() + text.slice(1);
+    }
+
+    function failedTasks(props) {
+        return (props.tasks || []).filter(function (t) {
+            return t.state === 'error' || t.state === 'cancelled';
+        });
+    }
+
+    function workflowLink(event, props) {
         var title = escapeHtml(event.title || '');
         var workflowUrl = safeExternalUrl(props.workflowUrl);
-        var linkedTitle = workflowUrl
+        return workflowUrl
             ? "<a href='" + escapeHtml(workflowUrl) +
-             "' target='_blank' rel='noopener noreferrer'>" + title + "</a>"
+              "' target='_blank' rel='noopener noreferrer'>" + title + "</a>"
             : title;
-        var lines = [
-            '<b>Name:</b> ' + linkedTitle,
-            '<b>Workflow ID:</b> ' + escapeHtml(props.workflowId),
-            '<b>Schedule:</b> ' + escapeHtml(props.scheduleText),
-            '<b>Time zone:</b> ' + escapeHtml(props.timeZone),
-            '<b>Created:</b> ' + escapeHtml(props.createdAt),
-            '<b>Next run:</b> ' + escapeHtml(props.nextExecutionAt),
-            '<b>State:</b> ' + escapeHtml(props.state)
-        ];
+    }
 
-        if (props.matchedExecutionStartedAt) {{
-            lines.push('<b>Matched run started:</b> '
-            + escapeHtml(props.matchedExecutionStartedAt));
-        }}
-        if (props.matchedExecutionFinishedAt) {{
-            lines.push('<b>Matched run finished:</b> '
-            + escapeHtml(props.matchedExecutionFinishedAt));
-        }}
+    // Short summary used for the hover tooltip and the "+ more" list.
+    function buildEventHtml(event, detailed) {
+        var props = event.extendedProps || {};
+        var lines = detailed ? [] : ['<b>Name:</b> ' + workflowLink(event, props)];
+        lines.push('<b>Workflow ID:</b> ' + escapeHtml(props.workflowId));
+        lines.push('<b>State:</b> ' + escapeHtml(stateLabel(props.state)));
 
+        if (props.kind === 'execution') {
+            lines.push('<b>Started:</b> ' + escapeHtml(formatTimestamp(props.startedAt)));
+            lines.push('<b>Finished:</b> ' + escapeHtml(
+                props.finishedAt ? formatTimestamp(props.finishedAt) : 'still running'));
+            lines.push('<b>Runtime:</b> ' + escapeHtml(formatDuration(props.durationSeconds)));
+            failedTasks(props).forEach(function (t) {
+                lines.push('<b>Failed task:</b> ' + escapeHtml(t.name));
+            });
+            if (props.stateInfo) {
+                lines.push('<b>Error:</b> ' + escapeHtml(props.stateInfo));
+            }
+            if (!detailed) lines.push('<i>Click for details</i>');
+        } else {
+            lines.push('<b>Scheduled for:</b> ' + escapeHtml(formatTimestamp(event.start)));
+            lines.push('<b>Schedule:</b> ' + escapeHtml(props.scheduleText));
+            lines.push('<b>Time zone:</b> ' + escapeHtml(props.timeZone));
+        }
         return lines.join('<br/>');
-    }}
+    }
 
-    function showTooltip(e, event) {{
+    // Full detail shown in the modal on click, including per-task status.
+    function buildDetailHtml(event) {
+        var props = event.extendedProps || {};
+        var color = STATE_COLORS[stateBucket(props.state)] || '#20639b';
+        var html = '<h3>' + workflowLink(event, props) +
+            '<span class="status-pill" style="background:' + color + '">' +
+            escapeHtml(stateLabel(props.state)) + '</span></h3>' + buildEventHtml(event, true);
+        html += '<br/><b>Schedule:</b> ' + escapeHtml(props.scheduleText);
+        html += '<br/><b>Time zone:</b> ' + escapeHtml(props.timeZone);
+        html += '<br/><b>Created:</b> ' + escapeHtml(props.createdAt);
+        if (props.kind === 'execution') {
+            html += '<br/><b>Execution ID:</b> ' + escapeHtml(props.executionId);
+        }
+
+        var links = [];
+        var executionUrl = safeExternalUrl(props.executionUrl);
+        var workflowUrl = safeExternalUrl(props.workflowUrl);
+        if (executionUrl) links.push([executionUrl, 'View execution \u2197']);
+        if (workflowUrl) links.push([workflowUrl, 'Open workflow \u2197']);
+        if (links.length) {
+            html += '<div class="detail-links">' + links.map(function (l) {
+                return "<a href='" + escapeHtml(l[0]) +
+                    "' target='_blank' rel='noopener noreferrer'>" + escapeHtml(l[1]) + '</a>';
+            }).join('') + '</div>';
+        }
+
+        var tasks = props.tasks || [];
+        if (tasks.length) {
+            html += '<h4>Tasks</h4><table class="task-table"><thead><tr>' +
+                '<th>Task</th><th>State</th><th>Runtime</th><th>Job / Run</th>' +
+                '</tr></thead><tbody>';
+            tasks.forEach(function (t) {
+                var failed = t.state === 'error' || t.state === 'cancelled';
+                html += '<tr class="' + (failed ? 'task-failed' : '') + '">' +
+                    '<td>' + escapeHtml(t.name) + '</td>' +
+                    '<td>' + escapeHtml(t.state) + '</td>' +
+                    '<td>' + escapeHtml(formatDuration(t.durationSeconds)) + '</td>' +
+                    '<td>' + taskJobHtml(t) + '</td></tr>';
+                if (t.stateInfo) {
+                    html += '<tr class="task-info"><td colspan="4"><pre>' +
+                        escapeHtml(t.stateInfo) + '</pre></td></tr>';
+                }
+            });
+            html += '</tbody></table>';
+        }
+        return html;
+    }
+
+    function taskJobHtml(task) {
+        if (!task.jobId) return 'n/a';
+        var label = escapeHtml('Job ' + task.jobId + ' / Run ' + task.runId);
+        var url = safeExternalUrl(task.jobUrl);
+        return url
+            ? "<a href='" + escapeHtml(url) + "' target='_blank' rel='noopener noreferrer'>" +
+              label + ' \u2197</a>'
+            : label;
+    }
+
+    var modalOpener = null;
+
+    function isModalOpen() {
+        return document.getElementById('event-modal').style.display === 'block';
+    }
+
+    function closeModal() {
+        document.getElementById('event-modal').style.display = 'none';
+        if (modalOpener && document.contains(modalOpener) && modalOpener.focus) {
+            modalOpener.focus();
+        }
+        modalOpener = null;
+    }
+
+    function openModal(html) {
+        var modal = document.getElementById('event-modal');
+        var content = document.getElementById('event-modal-content');
+        var closeBtn = document.createElement('button');
+
+        modalOpener = document.activeElement;
+        content.innerHTML = html;
+
+        var heading = content.querySelector('h3');
+        if (heading) {
+            heading.id = 'event-modal-title';
+            content.setAttribute('aria-labelledby', 'event-modal-title');
+            content.removeAttribute('aria-label');
+        } else {
+            content.removeAttribute('aria-labelledby');
+            content.setAttribute('aria-label', 'Details');
+        }
+
+        closeBtn.type = 'button';
+        closeBtn.className = 'close-btn';
+        closeBtn.id = 'modal-close';
+        closeBtn.setAttribute('aria-label', 'Close dialog');
+        closeBtn.textContent = '\\u00d7';
+        closeBtn.onclick = closeModal;
+        content.insertBefore(closeBtn, content.firstChild);
+
+        modal.style.display = 'block';
+        modal.onclick = function (e) {
+            if (e.target === modal) closeModal();
+        };
+        content.scrollTop = 0;
+        closeBtn.focus();
+    }
+
+    // Escape dismisses the modal; Tab / Shift+Tab wrap inside it so focus cannot
+    // land on the calendar behind the overlay.
+    document.addEventListener('keydown', function (e) {
+        if (!isModalOpen()) return;
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            closeModal();
+            return;
+        }
+        if (e.key !== 'Tab') return;
+        var content = document.getElementById('event-modal-content');
+        var focusable = content.querySelectorAll(
+            'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        if (!focusable.length) {
+            e.preventDefault();
+            content.focus();
+            return;
+        }
+        var first = focusable[0];
+        var last = focusable[focusable.length - 1];
+        if (!content.contains(document.activeElement)) {
+            e.preventDefault();
+            first.focus();
+        } else if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+        }
+    });
+
+    function showTooltip(e, event) {
         tooltip.innerHTML = buildEventHtml(event);
         tooltip.style.display = 'block';
         positionTooltip(e);
-    }}
+    }
 
-    function positionTooltip(e) {{
+    function positionTooltip(e) {
         var x = e.clientX + 12;
         var y = e.clientY + 12;
         if (x + 380 > window.innerWidth) x = e.clientX - 390;
-        if (y + 240 > window.innerHeight) y = e.clientY - 250;
+        if (y + 300 > window.innerHeight) y = e.clientY - 310;
         tooltip.style.left = x + 'px';
         tooltip.style.top = y + 'px';
-    }}
+    }
 
-    function hideTooltip() {{
+    function hideTooltip() {
         tooltip.style.display = 'none';
-    }}
+    }
 
-    var cal = new FullCalendar.Calendar(document.getElementById('calendar'), {{
-        initialView: 'dayGridMonth',
-        timeZone: '{calendar_time_zone}',
+    // Everyday workflows would swamp the month grid, so they only appear in week/day views.
+    function visibleEvents() {
+        var monthView = currentViewType === 'dayGridMonth';
+        return ALL_EVENTS.filter(function (ev) {
+            if (monthView && ev.everyday) return false;
+            return (ev.title || '').toLowerCase().includes(searchQuery);
+        });
+    }
+
+    var cal = new FullCalendar.Calendar(document.getElementById('calendar'), {
+        initialView: currentViewType,
+        timeZone: '__CALENDAR_TIME_ZONE__',
         height: 'auto',
-        events: ALL_EVENTS,
+        headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: 'dayGridMonth,timeGridWeek,timeGridDay'
+        },
+        buttonText: { month: 'Month', week: 'Week', day: 'Day', today: 'Today' },
+        nowIndicator: true,
+        scrollTime: '06:00:00',
         dayMaxEvents: true,
+        events: function (info, success) { success(visibleEvents()); },
 
-        eventClick: function (info) {{
-            var workflowUrl = safeExternalUrl(info.event.url
-             || info.event.extendedProps.workflowUrl);
-            if (!workflowUrl) return;
+        eventClassNames: function (arg) {
+            var dimmed = highlightedState &&
+                stateBucket(arg.event.extendedProps.state) !== highlightedState;
+            return dimmed ? ['dimmed'] : [];
+        },
+
+        datesSet: function (info) {
+            if (info.view.type !== currentViewType) {
+                currentViewType = info.view.type;
+                cal.refetchEvents();
+            }
+        },
+
+        eventClick: function (info) {
             info.jsEvent.preventDefault();
-            window.open(workflowUrl, '_blank', 'noopener');
-        }},
+            hideTooltip();
+            openModal(buildDetailHtml(info.event));
+        },
 
-        eventDidMount: function (info) {{
-            info.el.addEventListener('mouseenter', function (e) {{ showTooltip(e, info.event); }});
+        eventDidMount: function (info) {
+            info.el.addEventListener('mouseenter', function (e) { showTooltip(e, info.event); });
             info.el.addEventListener('mousemove', positionTooltip);
             info.el.addEventListener('mouseleave', hideTooltip);
-        }},
+        },
 
-        moreLinkClick: function (arg) {{
+        moreLinkClick: function (arg) {
             var dateStr = arg.date ? arg.date.toISOString().slice(0, 10) : '';
-            var modal = document.getElementById('event-modal');
-            var content = document.getElementById('event-modal-content');
-            var heading = document.createElement('h3');
-            var list = document.createElement('ul');
-            var closeBtn = document.createElement('span');
-
-            content.textContent = '';
-            heading.textContent = 'Workflows on ' + dateStr;
-            content.appendChild(heading);
-
-            (arg.allSegs || []).forEach(function (seg) {{
-                var item = document.createElement('li');
-                item.innerHTML = buildEventHtml(seg.event);
-                list.appendChild(item);
-            }});
-
-            content.appendChild(list);
-
-            closeBtn.className = 'close-btn';
-            closeBtn.id = 'modal-close';
-            closeBtn.textContent = '×';
-            content.appendChild(closeBtn);
-
-            modal.style.display = 'block';
-            closeBtn.onclick = function () {{ modal.style.display = 'none'; }};
-            modal.onclick = function (e) {{
-                if (e.target === modal) modal.style.display = 'none';
-            }};
+            var html = '<h3>Workflows on ' + escapeHtml(dateStr) + '</h3><ul>';
+            (arg.allSegs || []).forEach(function (seg) {
+                html += '<li>' + buildEventHtml(seg.event) + '</li>';
+            });
+            openModal(html + '</ul>');
             return false;
-        }}
-    }});
+        }
+    });
     cal.render();
+
+    function renderSummary() {
+        var runs = ALL_EVENTS.filter(function (ev) { return ev.kind === 'execution'; });
+        var count = function (bucket) {
+            return runs.filter(function (ev) { return stateBucket(ev.state) === bucket; }).length;
+        };
+        var finished = count('succeeded') + count('failed');
+        var rate = finished ? Math.round(100 * count('succeeded') / finished) + '%' : 'n/a';
+        var durations = runs.map(function (ev) { return ev.durationSeconds; })
+            .filter(function (d) { return d !== null && d !== undefined; });
+        var avg = durations.length
+            ? formatDuration(durations.reduce(function (a, b) { return a + b; }, 0) /
+                             durations.length)
+            : 'n/a';
+        var weekAhead = Date.now() + 7 * 24 * 3600 * 1000;
+        var upcoming = ALL_EVENTS.filter(function (ev) {
+            return ev.kind === 'scheduled' && new Date(ev.start).getTime() <= weekAhead;
+        }).length;
+        var tiles = [
+            ['Runs', runs.length, '#20639b'],
+            ['Success rate', rate, STATE_COLORS.succeeded],
+            ['Failed', count('failed'), STATE_COLORS.failed],
+            ['Avg runtime', avg, '#b5c6d6'],
+            ['Upcoming (7 days)', upcoming, STATE_COLORS.scheduled]
+        ];
+        document.getElementById('summary-tiles').innerHTML = tiles.map(function (t) {
+            return '<div class="tile" style="border-top-color:' + t[2] + '">' +
+                '<div class="tile-value">' + escapeHtml(t[1]) + '</div>' +
+                '<div class="tile-label">' + escapeHtml(t[0]) + '</div></div>';
+        }).join('');
+    }
+
+    function renderFilters() {
+        var container = document.getElementById('status-filters');
+        Object.keys(STATE_LABELS).forEach(function (bucket) {
+            var chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'filter-chip';
+            chip.innerHTML = '<span class="dot" style="background:' + STATE_COLORS[bucket] +
+                '"></span>' + escapeHtml(STATE_LABELS[bucket]);
+            chip.setAttribute('aria-pressed', 'false');
+            chip.dataset.bucket = bucket;
+            chip.onclick = function () {
+                highlightedState = highlightedState === bucket ? null : bucket;
+                container.querySelectorAll('.filter-chip').forEach(function (c) {
+                    var on = c.dataset.bucket === highlightedState;
+                    c.classList.toggle('active', on);
+                    c.setAttribute('aria-pressed', String(on));
+                });
+                cal.refetchEvents();
+            };
+            container.appendChild(chip);
+        });
+    }
+
+    renderSummary();
+    renderFilters();
 
     var searchBox = document.getElementById('search-box');
     var everydayCards = document.querySelectorAll('#everyday-workflows-container .workflow-card');
 
-    searchBox.addEventListener('input', function () {{
-        var q = searchBox.value.trim().toLowerCase();
-        cal.batchRendering(function () {{
-            cal.getEvents().forEach(function (ev) {{ ev.remove(); }});
-            ALL_EVENTS.forEach(function (ev) {{
-                if ((ev.title || '').toLowerCase().includes(q)) cal.addEvent(ev);
-            }});
-        }});
-        everydayCards.forEach(function (card) {{
-            card.style.display = card.dataset.wfname.includes(q) ? '' : 'none';
-        }});
-    }});
-}}());
+    searchBox.addEventListener('input', function () {
+        searchQuery = searchBox.value.trim().toLowerCase();
+        cal.refetchEvents();
+        everydayCards.forEach(function (card) {
+            card.style.display = card.dataset.wfname.includes(searchQuery) ? '' : 'none';
+        });
+    });
+}());
 </script>
 """
+    state_colors = {
+        state: execution_state_color(state)
+        for state in ("succeeded", "failed", "running", "cancelled", "scheduled")
+    }
+    return script.replace("__CALENDAR_TIME_ZONE__", calendar_time_zone).replace(
+        "__STATE_COLORS__", json.dumps(state_colors)
+    )
 
 
-def build_html(calendar_events, everyday_cards_html, job_id):
+def build_html(calendar_events, everyday_cards_html, job_id, generated_at=""):
     events_json = json.dumps(calendar_events)
     # Prevent </script> from terminating the enclosing script tag.
     escaped_events_json = events_json.replace("</", "<\\/")
     escaped_job_id = html_lib.escape(str(job_id), quote=True)
+    escaped_generated_at = html_lib.escape(generated_at)
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -724,28 +1090,38 @@ def build_html(calendar_events, everyday_cards_html, job_id):
 </head>
 <body>
 
-<h1>Scheduled Workflows</h1>
+<header id="page-header">
+    <h1>Scheduled Workflows</h1>
+    <p class="subtitle">Run history and upcoming schedule &middot; last {LOOKBACK_DAYS} days
+        &middot; updated {escaped_generated_at}</p>
+</header>
 
-<div id="explanation">
-    <b>What's in this report?</b><br>
-    The calendar shows all non-archived, scheduled Civis workflows that run
-    on specific days of the week or month. Workflows scheduled to run
-    <em>every</em> day are listed separately below the calendar. Use
-    the search box to filter by name in both views and click on any
-    workflow name to navigate to it in platform.<br><br>
-    <b>Refreshing this report:</b>
-    Navigate to
+<div id="summary-tiles"></div>
+
+<details id="explanation">
+    <summary>About this report</summary>
+    <p>The calendar shows the actual runs (status and runtime) of all non-archived,
+    scheduled Civis workflows, plus upcoming scheduled runs. Switch between
+    <b>Month</b>, <b>Week</b> and <b>Day</b> views and use the arrows to look back.
+    Click a run for details, including which task failed and why, with links back to
+    the execution and its jobs in platform. Workflows scheduled to run <em>every</em>
+    day are left out of the month grid (they are listed below it) but appear in the
+    week and day views.</p>
+    <p><b>Refreshing this report:</b> navigate to
     <a href="https://platform.civisanalytics.com/spa/#/scripts/python3/{escaped_job_id}"
      target="_blank" rel="noopener noreferrer">this script</a>
-    and click the blue <b>Run</b> button.
-</div>
+    and click the blue <b>Run</b> button.</p>
+</details>
 
-<input type="text" id="search-box" placeholder="Search workflows by name..." />
+<div id="controls">
+    <input type="text" id="search-box" aria-label="Search workflows by name" placeholder="Search workflows by name..." />
+    <div id="status-filters"></div>
+</div>
 
 <div id="calendar"></div>
 
 <div id="event-modal">
-    <div class="modal-content" id="event-modal-content"></div>
+    <div class="modal-content" id="event-modal-content" role="dialog" aria-modal="true" tabindex="-1"></div>
 </div>
 
 <div id="everyday-list">
@@ -757,7 +1133,9 @@ def build_html(calendar_events, everyday_cards_html, job_id):
 
 <script type="application/json" id="events-data">{escaped_events_json}</script>
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
-{build_client_script(calendar_time_zone="local")}
+<script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@fullcalendar/luxon3@6.1.8/index.global.min.js"></script>
+{build_client_script(calendar_time_zone=DISPLAY_TIME_ZONE)}
 
 </body>
 </html>"""
@@ -780,49 +1158,54 @@ def main():
         for ws in normalized_workflows
         if set(ws["scheduled_days"]) == set(EVERYDAY_SCHEDULED_DAYS)
     ]
-    # Keep daily workflows out of the calendar grid so the month view stays readable.
-    main_workflows = [
-        ws
-        for ws in normalized_workflows
-        if set(ws["scheduled_days"]) != set(EVERYDAY_SCHEDULED_DAYS)
-    ]
 
     now = datetime.now(timezone.utc)
-    year = now.year
-    month = now.month
+    window_start_utc = now - timedelta(days=LOOKBACK_DAYS)
+    window_end_utc = now + timedelta(days=1)
+    range_start = window_start_utc.date()
+    range_end = (now + timedelta(days=FORWARD_DAYS)).date()
 
     workflow_executions = {}
-    for workflow in main_workflows:
-        # Fetch only the executions needed to color the occurrences visible in
-        # the current month.
-        occurrence_times = workflow_occurrence_times(workflow, year, month)
-        window_start_utc, window_end_utc = workflow_execution_fetch_window(occurrence_times)
-        workflow_executions[workflow["id"]] = fetch_workflow_executions(
+    for workflow in normalized_workflows:
+        executions = fetch_workflow_executions(
             client,
             workflow["id"],
             window_start_utc,
             window_end_utc,
         )
+        for execution in executions:
+            if execution["state"] not in FAILURE_STATES:
+                continue
+            try:
+                execution["tasks"] = fetch_execution_tasks(client, workflow["id"], execution["id"])
+            except Exception as err:  # keep the report usable if one lookup fails
+                print(f"Could not load tasks for execution {execution['id']}: {err}")
+        workflow_executions[workflow["id"]] = executions
 
-    # Reuse state from workflows.list to avoid one executions API call per
-    # everyday workflow.
+    # Reuse state from workflows.list for the "most recent run" on the everyday cards.
     everyday_workflow_states = {
         workflow["id"]: normalize_execution_state(workflow) for workflow in everyday_workflows
     }
 
     calendar_events = build_calendar_events(
-        main_workflows,
-        year,
-        month,
-        workflow_executions=workflow_executions,
-        now_utc=now,
+        normalized_workflows,
+        workflow_executions,
+        range_start,
+        range_end,
+        now,
     )
     everyday_cards_html = build_everyday_cards(
         everyday_workflows,
         most_recent_states=everyday_workflow_states,
     )
     job_id = os.environ.get("CIVIS_JOB_ID", "")
-    html = build_html(calendar_events, everyday_cards_html, job_id)
+    html = build_html(
+        calendar_events,
+        everyday_cards_html,
+        job_id,
+        generated_at=now.astimezone(DISPLAY_ZONEINFO).strftime("%Y-%m-%d %H:%M %Z"),
+    )
+
 
     report_name = "Scheduled Workflows"
     report_description = "Interactive calendar of non-archived Civis workflows and their schedules."
