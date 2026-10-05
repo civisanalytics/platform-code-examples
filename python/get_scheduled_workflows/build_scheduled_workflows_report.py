@@ -486,7 +486,8 @@ def build_html_styles():
             font-size: 0.9em;
             cursor: pointer;
         }
-        .filter-chip.off { opacity: 0.4; text-decoration: line-through; }
+        .filter-chip.active { border-color: #2a4d69; background: #e8f0f7; font-weight: 600; }
+        .fc-event.dimmed { opacity: 0.2; }
         .filter-chip .dot { width: 10px; height: 10px; border-radius: 50%; }
 
         #search-box {
@@ -673,7 +674,7 @@ def build_client_script(calendar_time_zone=DISPLAY_TIME_ZONE):
     };
     var currentViewType = 'timeGridWeek';
     var searchQuery = '';
-    var hiddenStates = {};
+    var highlightedState = null;
 
     // Queued/paused runs are grouped with running for the legend and filters.
     function stateBucket(state) {
@@ -934,7 +935,6 @@ def build_client_script(calendar_time_zone=DISPLAY_TIME_ZONE):
         var monthView = currentViewType === 'dayGridMonth';
         return ALL_EVENTS.filter(function (ev) {
             if (monthView && ev.everyday) return false;
-            if (hiddenStates[stateBucket(ev.state)]) return false;
             return (ev.title || '').toLowerCase().includes(searchQuery);
         });
     }
@@ -953,6 +953,12 @@ def build_client_script(calendar_time_zone=DISPLAY_TIME_ZONE):
         scrollTime: '06:00:00',
         dayMaxEvents: true,
         events: function (info, success) { success(visibleEvents()); },
+
+        eventClassNames: function (arg) {
+            var dimmed = highlightedState &&
+                stateBucket(arg.event.extendedProps.state) !== highlightedState;
+            return dimmed ? ['dimmed'] : [];
+        },
 
         datesSet: function (info) {
             if (info.view.type !== currentViewType) {
@@ -1024,11 +1030,15 @@ def build_client_script(calendar_time_zone=DISPLAY_TIME_ZONE):
             chip.className = 'filter-chip';
             chip.innerHTML = '<span class="dot" style="background:' + STATE_COLORS[bucket] +
                 '"></span>' + escapeHtml(STATE_LABELS[bucket]);
-            chip.setAttribute('aria-pressed', 'true');
+            chip.setAttribute('aria-pressed', 'false');
+            chip.dataset.bucket = bucket;
             chip.onclick = function () {
-                hiddenStates[bucket] = !hiddenStates[bucket];
-                chip.classList.toggle('off', !!hiddenStates[bucket]);
-                chip.setAttribute('aria-pressed', String(!hiddenStates[bucket]));
+                highlightedState = highlightedState === bucket ? null : bucket;
+                container.querySelectorAll('.filter-chip').forEach(function (c) {
+                    var on = c.dataset.bucket === highlightedState;
+                    c.classList.toggle('active', on);
+                    c.setAttribute('aria-pressed', String(on));
+                });
                 cal.refetchEvents();
             };
             container.appendChild(chip);
