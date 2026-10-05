@@ -340,7 +340,7 @@ def build_calendar_events(workflows, workflow_executions, range_start, range_end
         for execution in workflow_executions.get(ws["id"], []):
             start = execution["reference_at"]
             finished = parse_api_datetime(execution["finished_at"])
-            end = max(finished or start, start + MIN_DISPLAY_DURATION)
+            end = max(finished or now_utc, start + MIN_DISPLAY_DURATION)
             events.append(
                 {
                     "title": ws["name"],
