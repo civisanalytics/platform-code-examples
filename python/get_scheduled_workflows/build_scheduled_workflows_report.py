@@ -18,6 +18,12 @@ FAILURE_STATES = {"failed", "cancelled"}
 
 PLATFORM_URL = "https://platform.civisanalytics.com/spa/#"
 
+# Time zone the report is displayed in (calendar, event details, "generated at").
+# Use any IANA name, e.g. "America/Chicago", "America/New_York", "UTC".
+# Display only: each workflow's own schedule time zone is unchanged.
+DISPLAY_TIME_ZONE = "America/Chicago"
+DISPLAY_ZONEINFO = ZoneInfo(DISPLAY_TIME_ZONE)  # fails fast on a bad name
+
 
 def workflow_url(workflow_id):
     return f"{PLATFORM_URL}/workflows/{workflow_id}"
@@ -649,7 +655,7 @@ def build_html_styles():
     """
 
 
-def build_client_script(calendar_time_zone="local"):
+def build_client_script(calendar_time_zone=DISPLAY_TIME_ZONE):
     # Plain string (not an f-string) so the JavaScript braces don't need escaping.
     script = """
 <script>
@@ -708,7 +714,10 @@ def build_client_script(calendar_time_zone="local"):
     function formatTimestamp(value) {
         if (!value) return 'n/a';
         var d = new Date(value);
-        return isNaN(d.getTime()) ? String(value) : d.toLocaleString();
+        return isNaN(d.getTime()) ? String(value) : d.toLocaleString(undefined, {
+            timeZone: '__CALENDAR_TIME_ZONE__',
+            timeZoneName: 'short'
+        });
     }
 
     function stateLabel(state) {
@@ -1045,7 +1054,9 @@ def build_html(calendar_events, everyday_cards_html, job_id, generated_at=""):
 
 <script type="application/json" id="events-data">{escaped_events_json}</script>
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
-{build_client_script(calendar_time_zone="local")}
+<script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@fullcalendar/luxon3@6.1.8/index.global.min.js"></script>
+{build_client_script(calendar_time_zone=DISPLAY_TIME_ZONE)}
 
 </body>
 </html>"""
@@ -1113,7 +1124,7 @@ def main():
         calendar_events,
         everyday_cards_html,
         job_id,
-        generated_at=now.strftime("%Y-%m-%d %H:%M UTC"),
+        generated_at=now.astimezone(DISPLAY_ZONEINFO).strftime("%Y-%m-%d %H:%M %Z"),
     )
 
     # LOCAL-DEV: remove this block (and the sys import) once the script runs as a Civis job.
