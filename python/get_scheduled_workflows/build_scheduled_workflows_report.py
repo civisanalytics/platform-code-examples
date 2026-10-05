@@ -1,6 +1,5 @@
 import html as html_lib
 import os
-import sys
 from datetime import datetime, timedelta, timezone
 import json
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -1197,13 +1196,6 @@ def main():
         generated_at=now.astimezone(DISPLAY_ZONEINFO).strftime("%Y-%m-%d %H:%M %Z"),
     )
 
-    # LOCAL-DEV: remove this block (and the sys import) once the script runs as a Civis job.
-    if "--local" in sys.argv:
-        out_path = "scheduled_workflows.html"
-        with open(out_path, "w", encoding="utf-8") as f:
-            f.write(html)
-        print(f"Wrote {out_path}")
-        return
 
     report_name = "Scheduled Workflows"
     report_description = "Interactive calendar of non-archived Civis workflows and their schedules."
