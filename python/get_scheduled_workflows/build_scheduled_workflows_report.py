@@ -599,16 +599,21 @@ def build_html_styles():
             color: #2a4d69;
         }
         .modal-content ul { padding-left: 18px; }
+        .modal-content:focus { outline: none; }
         .close-btn {
             position: absolute;
             top: 12px;
             right: 18px;
+            padding: 0 4px;
+            background: none;
+            border: 0;
             font-size: 1.5em;
             color: #888;
             cursor: pointer;
             line-height: 1;
         }
         .close-btn:hover { color: #2a4d69; }
+        .close-btn:focus-visible { outline: 2px solid #2a4d69; outline-offset: 2px; }
 
         .status-pill {
             display: inline-block;
@@ -825,23 +830,86 @@ def build_client_script(calendar_time_zone=DISPLAY_TIME_ZONE):
             : label;
     }
 
+    var modalOpener = null;
+
+    function isModalOpen() {
+        return document.getElementById('event-modal').style.display === 'block';
+    }
+
+    function closeModal() {
+        document.getElementById('event-modal').style.display = 'none';
+        if (modalOpener && document.contains(modalOpener) && modalOpener.focus) {
+            modalOpener.focus();
+        }
+        modalOpener = null;
+    }
+
     function openModal(html) {
         var modal = document.getElementById('event-modal');
         var content = document.getElementById('event-modal-content');
-        var closeBtn = document.createElement('span');
+        var closeBtn = document.createElement('button');
 
+        modalOpener = document.activeElement;
         content.innerHTML = html;
+
+        var heading = content.querySelector('h3');
+        if (heading) {
+            heading.id = 'event-modal-title';
+            content.setAttribute('aria-labelledby', 'event-modal-title');
+            content.removeAttribute('aria-label');
+        } else {
+            content.removeAttribute('aria-labelledby');
+            content.setAttribute('aria-label', 'Details');
+        }
+
+        closeBtn.type = 'button';
         closeBtn.className = 'close-btn';
         closeBtn.id = 'modal-close';
+        closeBtn.setAttribute('aria-label', 'Close dialog');
         closeBtn.textContent = '\\u00d7';
-        content.appendChild(closeBtn);
+        closeBtn.onclick = closeModal;
+        content.insertBefore(closeBtn, content.firstChild);
 
         modal.style.display = 'block';
-        closeBtn.onclick = function () { modal.style.display = 'none'; };
         modal.onclick = function (e) {
-            if (e.target === modal) modal.style.display = 'none';
+            if (e.target === modal) closeModal();
         };
+        content.scrollTop = 0;
+        closeBtn.focus();
     }
+
+    // Escape dismisses the modal; Tab / Shift+Tab wrap inside it so focus cannot
+    // land on the calendar behind the overlay.
+    document.addEventListener('keydown', function (e) {
+        if (!isModalOpen()) return;
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            closeModal();
+            return;
+        }
+        if (e.key !== 'Tab') return;
+        var content = document.getElementById('event-modal-content');
+        var focusable = content.querySelectorAll(
+            'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        if (!focusable.length) {
+            e.preventDefault();
+            content.focus();
+            return;
+        }
+        var first = focusable[0];
+        var last = focusable[focusable.length - 1];
+        if (!content.contains(document.activeElement)) {
+            e.preventDefault();
+            first.focus();
+        } else if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+        }
+    });
 
     function showTooltip(e, event) {
         tooltip.innerHTML = buildEventHtml(event);
@@ -1044,7 +1112,7 @@ def build_html(calendar_events, everyday_cards_html, job_id, generated_at=""):
 <div id="calendar"></div>
 
 <div id="event-modal">
-    <div class="modal-content" id="event-modal-content"></div>
+    <div class="modal-content" id="event-modal-content" role="dialog" aria-modal="true" tabindex="-1"></div>
 </div>
 
 <div id="everyday-list">
