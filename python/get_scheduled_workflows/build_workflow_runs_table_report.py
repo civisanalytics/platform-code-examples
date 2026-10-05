@@ -1,5 +1,6 @@
 import csv
 import os
+import sys
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -179,6 +180,12 @@ def main():
     # Write locally first because Civis run outputs attach an uploaded file,
     # not an in-memory CSV string.
     write_csv(rows, local_csv_path)
+
+    # LOCAL-DEV: remove this block (and the sys import) once the script runs as a Civis job.
+    if "--local" in sys.argv:
+        print(f"CSV path: {local_csv_path}")
+        return
+
     file_id = upload_csv_as_run_output(client, local_csv_path, filename)
     print(f"Attached CSV run output file ID: {file_id}")
     print(f"CSV path: {local_csv_path}")
