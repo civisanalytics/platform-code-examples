@@ -41,14 +41,27 @@ def job_url(job_id):
 # Fetch all workflows (paginated)
 # ---------------------------------------------------------------------------
 def fetch_all_workflows(client):
+    # Every workflow, scheduled or not: unscheduled ones still have run history to show.
     workflows, page = [], 1
     while True:
-        page_workflows = client.workflows.list(page_num=page, scheduled=True)
+        page_workflows = client.workflows.list(page_num=page, limit=50)
         if not page_workflows:
             break
         workflows.extend(page_workflows)
         page += 1
     return workflows
+
+
+def fetch_all_scheduled_jobs(client):
+    # Scheduled jobs only: unscheduled jobs would swamp the calendar.
+    jobs, page = [], 1
+    while True:
+        page_jobs = client.jobs.list(page_num=page, limit=50, scheduled=True, archived="false")
+        if not page_jobs:
+            break
+        jobs.extend(page_jobs)
+        page += 1
+    return jobs
 
 
 # ---------------------------------------------------------------------------
@@ -86,38 +99,60 @@ def normalize_schedule_values(values, min_value, max_value):
     return [v for v in values if isinstance(v, int) and min_value <= v <= max_value]
 
 
-def normalize_workflow(workflow):
-    schedule = workflow.get("schedule", {})
-    normalized = {
-        "id": workflow["id"],
-        "name": str(workflow.get("name", "")),
+def normalize_schedule(schedule):
+    schedule = schedule or {}
+    return {
         "scheduled": bool(schedule.get("scheduled", False)),
         "scheduled_days": normalize_schedule_values(
-            schedule.get("scheduled_days", []),
+            schedule.get("scheduled_days") or [],
             0,
             6,
         ),
         "scheduled_hours": normalize_schedule_values(
-            schedule.get("scheduled_hours", []),
+            schedule.get("scheduled_hours") or [],
             0,
             23,
         ),
         "scheduled_minutes": normalize_schedule_values(
-            schedule.get("scheduled_minutes", []),
+            schedule.get("scheduled_minutes") or [],
             0,
             59,
         ),
         "scheduled_days_of_month": normalize_schedule_values(
-            schedule.get("scheduled_days_of_month", []),
+            schedule.get("scheduled_days_of_month") or [],
             1,
             31,
         ),
+    }
+
+
+def normalize_workflow(workflow):
+    return {
+        "item_type": "workflow",
+        "id": workflow["id"],
+        "name": str(workflow.get("name", "")),
+        **normalize_schedule(workflow.get("schedule")),
         "created_at": str(workflow.get("created_at", "")),
         "next_execution_at": str(workflow.get("next_execution_at", "")),
         "time_zone": getattr(get_workflow_zoneinfo(workflow), "key", "UTC"),
         "state": str(workflow.get("state", "")),
     }
-    return normalized
+
+
+def normalize_job(job):
+    # The API gives jobs no time zone, so their schedules are read in the display zone.
+    last_run = job.get("last_run") or {}
+    return {
+        "item_type": "job",
+        "id": job["id"],
+        "name": str(job.get("name", "")),
+        "job_type": str(job.get("type", "")),
+        **normalize_schedule(job.get("schedule")),
+        "created_at": str(job.get("created_at", "")),
+        "next_execution_at": "",
+        "time_zone": DISPLAY_TIME_ZONE,
+        "state": str(last_run.get("state") or ""),
+    }
 
 
 def event_time_pairs(ws):
@@ -173,7 +208,8 @@ def normalize_execution(execution):
     return {
         "id": execution.get("id"),
         "state": normalize_execution_state(execution),
-        "state_info": str(execution.get("mistral_state_info") or ""),
+        # Workflow executions report mistral_state_info; job runs report error.
+        "state_info": str(execution.get("mistral_state_info") or execution.get("error") or ""),
         "reference_at": execution_reference_time(execution),
         "started_at": str(execution.get("started_at", "") or ""),
         "finished_at": str(execution.get("finished_at", "") or ""),
@@ -211,22 +247,48 @@ def workflow_occurrence_times(ws, range_start, range_end):
 
 
 def fetch_workflow_executions(client, workflow_id, window_start_utc, window_end_utc):
-    if window_start_utc is None or window_end_utc is None:
-        return []
-
-    executions = []
-    page_num = 1
     limit = 50
-    while True:
-        # Keep paging only until executions are older than the month window
-        # needed for the current calendar view.
-        page = client.workflows.list_executions(
+    return collect_runs_in_window(
+        lambda page_num: client.workflows.list_executions(
             workflow_id,
             limit=limit,
             page_num=page_num,
             order="created_at",
             order_dir="desc",
-        )
+        ),
+        limit,
+        window_start_utc,
+        window_end_utc,
+    )
+
+
+def fetch_job_runs(client, job_id, window_start_utc, window_end_utc):
+    limit = 100
+    return collect_runs_in_window(
+        # Runs can only be ordered by id, which still tracks creation time.
+        lambda page_num: client.jobs.list_runs(
+            job_id,
+            limit=limit,
+            page_num=page_num,
+            order="id",
+            order_dir="desc",
+        ),
+        limit,
+        window_start_utc,
+        window_end_utc,
+    )
+
+
+def collect_runs_in_window(fetch_page, limit, window_start_utc, window_end_utc):
+    """Page through newest-first runs, keeping those that started inside the window."""
+    if window_start_utc is None or window_end_utc is None:
+        return []
+
+    executions = []
+    page_num = 1
+    while True:
+        # Keep paging only until runs are older than the window.
+        page = fetch_page(page_num)
         if not page:
             break
 
@@ -314,35 +376,49 @@ def format_execution_state_label(state):
     return normalized_state.title()
 
 
-def workflow_event_metadata(ws):
-    return {
-        "workflowId": ws["id"],
-        "workflowUrl": workflow_url(ws["id"]),
-        "scheduleText": schedule_to_string(ws),
-        "timeZone": ws.get("time_zone", "UTC"),
-        "createdAt": ws.get("created_at", ""),
-        "nextExecutionAt": ws.get("next_execution_at", ""),
-        # Everyday workflows are hidden from the month grid but shown in week/day views.
-        "everyday": set(ws["scheduled_days"]) == set(EVERYDAY_SCHEDULED_DAYS),
+def item_url(item):
+    if item["item_type"] == "job":
+        return job_url(item["id"])
+    return workflow_url(item["id"])
+
+
+def item_event_metadata(item):
+    metadata = {
+        "itemType": item["item_type"],
+        "itemId": item["id"],
+        "itemUrl": item_url(item),
+        "scheduleText": schedule_to_string(item),
+        "timeZone": item.get("time_zone", "UTC"),
+        "createdAt": item.get("created_at", ""),
+        "nextExecutionAt": item.get("next_execution_at", ""),
+        # Everyday items are hidden from the month grid but shown in week/day views.
+        "everyday": is_everyday(item),
     }
+    if item["item_type"] == "job":
+        metadata["jobType"] = item.get("job_type", "")
+        metadata["classNames"] = ["type-job"]
+    return metadata
 
 
 # ---------------------------------------------------------------------------
 # Build calendar events for FullCalendar
 # ---------------------------------------------------------------------------
-def build_calendar_events(workflows, workflow_executions, range_start, range_end, now_utc):
-    """Real executions (with true runtime/status) plus upcoming scheduled runs."""
-    events = []
-    for ws in workflows:
-        metadata = workflow_event_metadata(ws)
+def build_calendar_events(items, item_executions, range_start, range_end, now_utc):
+    """Real runs (with true runtime/status) plus upcoming scheduled runs.
 
-        for execution in workflow_executions.get(ws["id"], []):
+    items: normalized workflows and jobs. item_executions: {(item_type, id): [runs]}.
+    """
+    events = []
+    for item in items:
+        metadata = item_event_metadata(item)
+
+        for execution in item_executions.get((item["item_type"], item["id"]), []):
             start = execution["reference_at"]
             finished = parse_api_datetime(execution["finished_at"])
             end = max(finished or now_utc, start + MIN_DISPLAY_DURATION)
             events.append(
                 {
-                    "title": ws["name"],
+                    "title": item["name"],
                     "start": start.isoformat(),
                     "end": end.isoformat(),
                     "color": execution_state_color(execution["state"]),
@@ -350,7 +426,11 @@ def build_calendar_events(workflows, workflow_executions, range_start, range_end
                     "kind": "execution",
                     "state": execution["state"],
                     "executionId": execution["id"],
-                    "executionUrl": execution_url(ws["id"], execution["id"]),
+                    "executionUrl": (
+                        execution_url(item["id"], execution["id"])
+                        if item["item_type"] == "workflow"
+                        else ""
+                    ),
                     "startedAt": execution["started_at"],
                     "finishedAt": execution["finished_at"],
                     "durationSeconds": execution["duration_seconds"],
@@ -359,13 +439,16 @@ def build_calendar_events(workflows, workflow_executions, range_start, range_end
                 }
             )
 
-        for occurrence_time in workflow_occurrence_times(ws, range_start, range_end):
+        # Unscheduled workflows only contribute their history.
+        if not item["scheduled"]:
+            continue
+        for occurrence_time in workflow_occurrence_times(item, range_start, range_end):
             # Past slots are represented by the executions above, not projected.
             if occurrence_time.astimezone(timezone.utc) <= now_utc:
                 continue
             events.append(
                 {
-                    "title": ws["name"],
+                    "title": item["name"],
                     "start": occurrence_time.isoformat(),
                     "color": execution_state_color("scheduled"),
                     **metadata,
@@ -384,7 +467,7 @@ def build_everyday_cards(everyday_workflows, most_recent_states=None):
     cards = []
     for ws in everyday_workflows:
         workflow_name = str(ws.get("name", ""))
-        workflow_link = html_lib.escape(workflow_url(ws.get("id", "")))
+        workflow_link = html_lib.escape(item_url(ws))
         workflow_name_lower = html_lib.escape(workflow_name.lower(), quote=True)
         workflow_name_html = html_lib.escape(workflow_name)
         schedule_html = html_lib.escape(schedule_to_string(ws))
@@ -488,6 +571,22 @@ def build_html_styles():
         }
         .filter-chip.active { border-color: #2a4d69; background: #e8f0f7; font-weight: 600; }
         .fc-event.dimmed { opacity: 0.2; }
+        .fc-event.type-job { border-left: 4px solid #2a4d69; }
+        .type-badge {
+            display: inline-block;
+            margin-right: 4px;
+            padding: 0 4px;
+            border-radius: 3px;
+            background: rgba(255,255,255,0.3);
+            font-size: 0.75em;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        .type-toggles { display: flex; align-items: center; gap: 2px; }
+        .type-toggles-label { font-size: 0.9em; color: #555; }
+        .type-toggle { opacity: 0.6; }
+        .type-toggle.on { opacity: 1; border-color: #2a4d69; background: #e8f0f7; font-weight: 600; }
+        .everyday-section + .everyday-section { margin-top: 28px; }
         .filter-chip .dot { width: 10px; height: 10px; border-radius: 50%; }
 
         #search-box {
@@ -675,6 +774,7 @@ def build_client_script(calendar_time_zone=DISPLAY_TIME_ZONE):
     var currentViewType = 'timeGridWeek';
     var searchQuery = '';
     var highlightedState = null;
+    var visibleTypes = { workflow: true, job: true };
 
     // Queued/paused runs are grouped with running for the legend and filters.
     function stateBucket(state) {
@@ -736,11 +836,15 @@ def build_client_script(calendar_time_zone=DISPLAY_TIME_ZONE):
         });
     }
 
-    function workflowLink(event, props) {
+    function typeLabel(props) {
+        return props.itemType === 'job' ? 'Job' : 'Workflow';
+    }
+
+    function itemLink(event, props) {
         var title = escapeHtml(event.title || '');
-        var workflowUrl = safeExternalUrl(props.workflowUrl);
-        return workflowUrl
-            ? "<a href='" + escapeHtml(workflowUrl) +
+        var itemUrl = safeExternalUrl(props.itemUrl);
+        return itemUrl
+            ? "<a href='" + escapeHtml(itemUrl) +
               "' target='_blank' rel='noopener noreferrer'>" + title + "</a>"
             : title;
     }
@@ -748,8 +852,9 @@ def build_client_script(calendar_time_zone=DISPLAY_TIME_ZONE):
     // Short summary used for the hover tooltip and the "+ more" list.
     function buildEventHtml(event, detailed) {
         var props = event.extendedProps || {};
-        var lines = detailed ? [] : ['<b>Name:</b> ' + workflowLink(event, props)];
-        lines.push('<b>Workflow ID:</b> ' + escapeHtml(props.workflowId));
+        var lines = detailed ? [] : ['<b>Name:</b> ' + itemLink(event, props)];
+        lines.push('<b>Type:</b> ' + typeLabel(props));
+        lines.push('<b>' + typeLabel(props) + ' ID:</b> ' + escapeHtml(props.itemId));
         lines.push('<b>State:</b> ' + escapeHtml(stateLabel(props.state)));
 
         if (props.kind === 'execution') {
@@ -776,21 +881,22 @@ def build_client_script(calendar_time_zone=DISPLAY_TIME_ZONE):
     function buildDetailHtml(event) {
         var props = event.extendedProps || {};
         var color = STATE_COLORS[stateBucket(props.state)] || '#20639b';
-        var html = '<h3>' + workflowLink(event, props) +
+        var html = '<h3>' + itemLink(event, props) +
             '<span class="status-pill" style="background:' + color + '">' +
             escapeHtml(stateLabel(props.state)) + '</span></h3>' + buildEventHtml(event, true);
         html += '<br/><b>Schedule:</b> ' + escapeHtml(props.scheduleText);
         html += '<br/><b>Time zone:</b> ' + escapeHtml(props.timeZone);
         html += '<br/><b>Created:</b> ' + escapeHtml(props.createdAt);
         if (props.kind === 'execution') {
-            html += '<br/><b>Execution ID:</b> ' + escapeHtml(props.executionId);
+            html += '<br/><b>' + (props.itemType === 'job' ? 'Run' : 'Execution') + ' ID:</b> ' +
+                escapeHtml(props.executionId);
         }
 
         var links = [];
         var executionUrl = safeExternalUrl(props.executionUrl);
-        var workflowUrl = safeExternalUrl(props.workflowUrl);
-        if (executionUrl) links.push([executionUrl, 'View execution \u2197']);
-        if (workflowUrl) links.push([workflowUrl, 'Open workflow \u2197']);
+        var itemUrl = safeExternalUrl(props.itemUrl);
+        if (executionUrl) links.push([executionUrl, (props.itemType === 'job' ? 'View run' : 'View execution') + ' \u2197']);
+        if (itemUrl) links.push([itemUrl, 'Open ' + typeLabel(props).toLowerCase() + ' \u2197']);
         if (links.length) {
             html += '<div class="detail-links">' + links.map(function (l) {
                 return "<a href='" + escapeHtml(l[0]) +
@@ -930,10 +1036,11 @@ def build_client_script(calendar_time_zone=DISPLAY_TIME_ZONE):
         tooltip.style.display = 'none';
     }
 
-    // Everyday workflows would swamp the month grid, so they only appear in week/day views.
+    // Everyday workflows/jobs would swamp the month grid, so they only appear in week/day views.
     function visibleEvents() {
         var monthView = currentViewType === 'dayGridMonth';
         return ALL_EVENTS.filter(function (ev) {
+            if (!visibleTypes[ev.itemType]) return false;
             if (monthView && ev.everyday) return false;
             return (ev.title || '').toLowerCase().includes(searchQuery);
         });
@@ -974,6 +1081,13 @@ def build_client_script(calendar_time_zone=DISPLAY_TIME_ZONE):
         },
 
         eventDidMount: function (info) {
+            var titleEl = info.el.querySelector('.fc-event-title');
+            if (titleEl) {
+                var badge = document.createElement('span');
+                badge.className = 'type-badge';
+                badge.textContent = info.event.extendedProps.itemType === 'job' ? 'Job' : 'WF';
+                titleEl.insertBefore(badge, titleEl.firstChild);
+            }
             info.el.addEventListener('mouseenter', function (e) { showTooltip(e, info.event); });
             info.el.addEventListener('mousemove', positionTooltip);
             info.el.addEventListener('mouseleave', hideTooltip);
@@ -981,7 +1095,7 @@ def build_client_script(calendar_time_zone=DISPLAY_TIME_ZONE):
 
         moreLinkClick: function (arg) {
             var dateStr = arg.date ? arg.date.toISOString().slice(0, 10) : '';
-            var html = '<h3>Workflows on ' + escapeHtml(dateStr) + '</h3><ul>';
+            var html = '<h3>Events on ' + escapeHtml(dateStr) + '</h3><ul>';
             (arg.allSegs || []).forEach(function (seg) {
                 html += '<li>' + buildEventHtml(seg.event) + '</li>';
             });
@@ -992,7 +1106,8 @@ def build_client_script(calendar_time_zone=DISPLAY_TIME_ZONE):
     cal.render();
 
     function renderSummary() {
-        var runs = ALL_EVENTS.filter(function (ev) { return ev.kind === 'execution'; });
+        var shown = ALL_EVENTS.filter(function (ev) { return visibleTypes[ev.itemType]; });
+        var runs = shown.filter(function (ev) { return ev.kind === 'execution'; });
         var count = function (bucket) {
             return runs.filter(function (ev) { return stateBucket(ev.state) === bucket; }).length;
         };
@@ -1005,7 +1120,7 @@ def build_client_script(calendar_time_zone=DISPLAY_TIME_ZONE):
                              durations.length)
             : 'n/a';
         var weekAhead = Date.now() + 7 * 24 * 3600 * 1000;
-        var upcoming = ALL_EVENTS.filter(function (ev) {
+        var upcoming = shown.filter(function (ev) {
             return ev.kind === 'scheduled' && new Date(ev.start).getTime() <= weekAhead;
         }).length;
         var tiles = [
@@ -1045,11 +1160,51 @@ def build_client_script(calendar_time_zone=DISPLAY_TIME_ZONE):
         });
     }
 
+    var EVERYDAY_SECTIONS = {
+        workflow: document.getElementById('everyday-workflows-section'),
+        job: document.getElementById('everyday-jobs-section')
+    };
+
+    function applyTypeVisibility() {
+        Object.keys(EVERYDAY_SECTIONS).forEach(function (type) {
+            EVERYDAY_SECTIONS[type].style.display = visibleTypes[type] ? '' : 'none';
+        });
+        document.getElementById('everyday-list').style.display =
+            (visibleTypes.workflow || visibleTypes.job) ? '' : 'none';
+        renderSummary();
+        cal.refetchEvents();
+    }
+
+    // Both types are shown by default; each toggle independently adds or removes one.
+    function renderTypeToggles() {
+        var container = document.getElementById('type-toggles');
+        var label = document.createElement('span');
+        label.className = 'type-toggles-label';
+        label.textContent = 'Show:';
+        container.appendChild(label);
+        [['workflow', 'Workflows'], ['job', 'Jobs']].forEach(function (entry) {
+            var type = entry[0];
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'filter-chip type-toggle on';
+            btn.textContent = entry[1];
+            btn.setAttribute('aria-pressed', 'true');
+            btn.onclick = function () {
+                visibleTypes[type] = !visibleTypes[type];
+                btn.classList.toggle('on', visibleTypes[type]);
+                btn.setAttribute('aria-pressed', String(visibleTypes[type]));
+                applyTypeVisibility();
+            };
+            container.appendChild(btn);
+        });
+    }
+
     renderSummary();
     renderFilters();
+    renderTypeToggles();
 
     var searchBox = document.getElementById('search-box');
-    var everydayCards = document.querySelectorAll('#everyday-workflows-container .workflow-card');
+    var everydayCards = document.querySelectorAll('#everyday-list .workflow-card');
 
     searchBox.addEventListener('input', function () {
         searchQuery = searchBox.value.trim().toLowerCase();
@@ -1070,7 +1225,9 @@ def build_client_script(calendar_time_zone=DISPLAY_TIME_ZONE):
     )
 
 
-def build_html(calendar_events, everyday_cards_html, job_id, generated_at=""):
+def build_html(
+    calendar_events, everyday_cards_html, everyday_job_cards_html, job_id, generated_at=""
+):
     events_json = json.dumps(calendar_events)
     # Prevent </script> from terminating the enclosing script tag.
     escaped_events_json = events_json.replace("</", "<\\/")
@@ -1081,7 +1238,7 @@ def build_html(calendar_events, everyday_cards_html, job_id, generated_at=""):
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Civis Workflow Schedules</title>
+    <title>Civis Workflow and Job Schedules</title>
     <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css"
      rel="stylesheet" />
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap"
@@ -1091,7 +1248,7 @@ def build_html(calendar_events, everyday_cards_html, job_id, generated_at=""):
 <body>
 
 <header id="page-header">
-    <h1>Scheduled Workflows</h1>
+    <h1>Scheduled Workflows and Jobs</h1>
     <p class="subtitle">Run history and upcoming schedule &middot; last {LOOKBACK_DAYS} days
         &middot; updated {escaped_generated_at}</p>
 </header>
@@ -1100,13 +1257,16 @@ def build_html(calendar_events, everyday_cards_html, job_id, generated_at=""):
 
 <details id="explanation">
     <summary>About this report</summary>
-    <p>The calendar shows the actual runs (status and runtime) of all non-archived,
-    scheduled Civis workflows, plus upcoming scheduled runs. Switch between
-    <b>Month</b>, <b>Week</b> and <b>Day</b> views and use the arrows to look back.
-    Click a run for details, including which task failed and why, with links back to
-    the execution and its jobs in platform. Workflows scheduled to run <em>every</em>
-    day are left out of the month grid (they are listed below it) but appear in the
-    week and day views.</p>
+    <p>The calendar shows the actual runs (status and runtime) of all non-archived
+    Civis workflows, scheduled or not, and of scheduled jobs, plus their upcoming
+    scheduled runs. Use <b>Show</b> to turn workflows or jobs on and off, and the status
+    chips to highlight one status. Switch between <b>Month</b>, <b>Week</b> and
+    <b>Day</b> views and use the arrows to look back. Click a run for details, including
+    which task failed and why, with links back to platform. Items scheduled to run
+    <em>every</em> day are left out of the month grid (they are listed below it) but
+    appear in the week and day views.</p>
+    <p>Platform does not record a time zone for job schedules, so upcoming job runs are
+    projected in {html_lib.escape(DISPLAY_TIME_ZONE)}. Past runs are always accurate.</p>
     <p><b>Refreshing this report:</b> navigate to
     <a href="https://platform.civisanalytics.com/spa/#/scripts/python3/{escaped_job_id}"
      target="_blank" rel="noopener noreferrer">this script</a>
@@ -1114,7 +1274,8 @@ def build_html(calendar_events, everyday_cards_html, job_id, generated_at=""):
 </details>
 
 <div id="controls">
-    <input type="text" id="search-box" aria-label="Search workflows by name" placeholder="Search workflows by name..." />
+    <input type="text" id="search-box" aria-label="Search workflows and jobs by name" placeholder="Search workflows and jobs by name..." />
+    <div id="type-toggles" class="type-toggles" role="group" aria-label="Show"></div>
     <div id="status-filters"></div>
 </div>
 
@@ -1125,10 +1286,18 @@ def build_html(calendar_events, everyday_cards_html, job_id, generated_at=""):
 </div>
 
 <div id="everyday-list">
-    <h2>Workflows Scheduled Every Day</h2>
-    <div id="everyday-workflows-container">
-        {everyday_cards_html}
-    </div>
+    <section id="everyday-workflows-section" class="everyday-section">
+        <h2>Workflows Scheduled Every Day</h2>
+        <div id="everyday-workflows-container">
+            {everyday_cards_html}
+        </div>
+    </section>
+    <section id="everyday-jobs-section" class="everyday-section">
+        <h2>Jobs Scheduled Every Day</h2>
+        <div id="everyday-jobs-container">
+            {everyday_job_cards_html}
+        </div>
+    </section>
 </div>
 
 <script type="application/json" id="events-data">{escaped_events_json}</script>
@@ -1141,23 +1310,29 @@ def build_html(calendar_events, everyday_cards_html, job_id, generated_at=""):
 </html>"""
 
 
+def is_everyday(item):
+    return item["scheduled"] and set(item["scheduled_days"]) == set(EVERYDAY_SCHEDULED_DAYS)
+
+
+def log_progress(label, index, total):
+    if index % 25 == 0 or index == total:
+        print(f"Loaded run history for {index}/{total} {label}")
+
+
 def main():
     import civis
 
     client = civis.APIClient()
-    all_workflows = fetch_all_workflows(client)
 
     normalized_workflows = [
         normalize_workflow(wf)
-        for wf in all_workflows
-        if not wf.get("archived", False) and wf.get("schedule", {}).get("scheduled", False)
+        for wf in fetch_all_workflows(client)
+        if not wf.get("archived", False)
     ]
+    normalized_jobs = [normalize_job(job) for job in fetch_all_scheduled_jobs(client)]
 
-    everyday_workflows = [
-        ws
-        for ws in normalized_workflows
-        if set(ws["scheduled_days"]) == set(EVERYDAY_SCHEDULED_DAYS)
-    ]
+    everyday_workflows = [ws for ws in normalized_workflows if is_everyday(ws)]
+    everyday_jobs = [job for job in normalized_jobs if is_everyday(job)]
 
     now = datetime.now(timezone.utc)
     window_start_utc = now - timedelta(days=LOOKBACK_DAYS)
@@ -1165,8 +1340,8 @@ def main():
     range_start = window_start_utc.date()
     range_end = (now + timedelta(days=FORWARD_DAYS)).date()
 
-    workflow_executions = {}
-    for workflow in normalized_workflows:
+    item_executions = {}
+    for index, workflow in enumerate(normalized_workflows, start=1):
         executions = fetch_workflow_executions(
             client,
             workflow["id"],
@@ -1180,16 +1355,28 @@ def main():
                 execution["tasks"] = fetch_execution_tasks(client, workflow["id"], execution["id"])
             except Exception as err:  # keep the report usable if one lookup fails
                 print(f"Could not load tasks for execution {execution['id']}: {err}")
-        workflow_executions[workflow["id"]] = executions
+        item_executions[("workflow", workflow["id"])] = executions
+        log_progress("workflows", index, len(normalized_workflows))
 
-    # Reuse state from workflows.list for the "most recent run" on the everyday cards.
-    everyday_workflow_states = {
-        workflow["id"]: normalize_execution_state(workflow) for workflow in everyday_workflows
+    for index, job in enumerate(normalized_jobs, start=1):
+        item_executions[("job", job["id"])] = fetch_job_runs(
+            client,
+            job["id"],
+            window_start_utc,
+            window_end_utc,
+        )
+        log_progress("jobs", index, len(normalized_jobs))
+
+    # Reuse state from the list calls for the "most recent run" on the everyday cards.
+    everyday_workflow_states = {ws["id"]: normalize_execution_state(ws) for ws in everyday_workflows}
+    everyday_job_states = {
+        job["id"]: normalize_execution_state(job) if job["state"] else "not run"
+        for job in everyday_jobs
     }
 
     calendar_events = build_calendar_events(
-        normalized_workflows,
-        workflow_executions,
+        normalized_workflows + normalized_jobs,
+        item_executions,
         range_start,
         range_end,
         now,
@@ -1198,17 +1385,24 @@ def main():
         everyday_workflows,
         most_recent_states=everyday_workflow_states,
     )
+    everyday_job_cards_html = build_everyday_cards(
+        everyday_jobs,
+        most_recent_states=everyday_job_states,
+    )
     job_id = os.environ.get("CIVIS_JOB_ID", "")
     html = build_html(
         calendar_events,
         everyday_cards_html,
+        everyday_job_cards_html,
         job_id,
         generated_at=now.astimezone(DISPLAY_ZONEINFO).strftime("%Y-%m-%d %H:%M %Z"),
     )
 
-
-    report_name = "Scheduled Workflows"
-    report_description = "Interactive calendar of non-archived Civis workflows and their schedules."
+    report_name = "Scheduled Workflows and Jobs"
+    report_description = (
+        "Interactive calendar of non-archived Civis workflows and scheduled jobs, "
+        "with run history and upcoming schedules."
+    )
     report_id = os.environ.get("REPORT_ID")
 
     if report_id:
