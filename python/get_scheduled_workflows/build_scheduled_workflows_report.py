@@ -19,7 +19,7 @@ PLATFORM_URL = "https://platform.civisanalytics.com/spa/#"
 
 # Time zone the report is displayed in (calendar, event details, "generated at").
 # Use any IANA name, e.g. "America/Chicago", "America/New_York", "UTC".
-# Display only: each workflow's own schedule time zone is unchanged.
+# Display only: never used to interpret schedules.
 DISPLAY_TIME_ZONE = "America/Chicago"
 DISPLAY_ZONEINFO = ZoneInfo(DISPLAY_TIME_ZONE)  # fails fast on a bad name
 
@@ -56,12 +56,44 @@ def fetch_all_scheduled_jobs(client):
     # Scheduled jobs only: unscheduled jobs would swamp the calendar.
     jobs, page = [], 1
     while True:
-        page_jobs = client.jobs.list(page_num=page, limit=50, scheduled=True, archived="false")
+        page_jobs = client.jobs.list(
+            page_num=page, limit=50, scheduled=True, archived="false"
+        )
         if not page_jobs:
             break
         jobs.extend(page_jobs)
         page += 1
     return jobs
+
+
+# The jobs list has no time zone; it lives on each job's own endpoint, which depends on
+# the job type. Types not listed (e.g. enhancements) expose no time zone.
+JOB_TIME_ZONE_GETTERS = {
+    "JobTypes::SqlRunner": lambda client, job_id: client.scripts.get_sql(job_id),
+    "JobTypes::ContainerDocker": lambda client, job_id: client.scripts.get_containers(
+        job_id
+    ),
+    "JobTypes::PythonDocker": lambda client, job_id: client.scripts.get_python3(job_id),
+    "JobTypes::Import": lambda client, job_id: client.imports.get(job_id),
+    "JobTypes::RDocker": lambda client, job_id: client.scripts.get_r(job_id),
+    "JobTypes::DbtDocker": lambda client, job_id: client.scripts.get_dbt(job_id),
+    "JobTypes::ScriptedSql": lambda client, job_id: client.scripts.get_javascript(
+        job_id
+    ),
+}
+
+
+def fetch_job_time_zone(client, job):
+    """The job's schedule time zone from its type-specific endpoint, or "" if unknown."""
+    getter = JOB_TIME_ZONE_GETTERS.get(job.get("type"))
+    if getter is None:
+        print(f"No time zone endpoint for job {job['id']} (type {job.get('type')})")
+        return ""
+    try:
+        return str(getter(client, job["id"]).get("time_zone") or "")
+    except Exception as error:  # e.g. an export, which /imports/{id} does not serve
+        print(f"Could not load time zone for job {job['id']}: {error}")
+        return ""
 
 
 # ---------------------------------------------------------------------------
@@ -82,17 +114,20 @@ def schedule_to_string(ws):
         h_list = hours or [0]
         m_list = minutes or [0]
         times = [f"{h}:{m:02d}" for h in h_list for m in m_list]
-        time_zone = getattr(get_workflow_zoneinfo(ws), "key", "UTC")
+        time_zone = getattr(get_workflow_zoneinfo(ws), "key", "unknown time zone")
         parts.append(f"Time ({time_zone}): " + ", ".join(times))
     return "; ".join(parts) if parts else "N/A"
 
 
 def get_workflow_zoneinfo(ws):
-    time_zone_name = str(ws.get("time_zone") or "UTC")
+    """The zone the item's schedule is written in, or None if it is not known."""
+    time_zone_name = str(ws.get("time_zone") or "")
+    if not time_zone_name:
+        return None
     try:
         return ZoneInfo(time_zone_name)
     except ZoneInfoNotFoundError:
-        return ZoneInfo("UTC")
+        return None
 
 
 def normalize_schedule_values(values, min_value, max_value):
@@ -134,13 +169,13 @@ def normalize_workflow(workflow):
         **normalize_schedule(workflow.get("schedule")),
         "created_at": str(workflow.get("created_at", "")),
         "next_execution_at": str(workflow.get("next_execution_at", "")),
-        "time_zone": getattr(get_workflow_zoneinfo(workflow), "key", "UTC"),
+        "time_zone": getattr(get_workflow_zoneinfo(workflow), "key", ""),
         "state": str(workflow.get("state", "")),
     }
 
 
-def normalize_job(job):
-    # The API gives jobs no time zone, so their schedules are read in the display zone.
+def normalize_job(job, time_zone=""):
+    # time_zone comes from fetch_job_time_zone; "" (unknown) means no projections.
     last_run = job.get("last_run") or {}
     return {
         "item_type": "job",
@@ -150,7 +185,7 @@ def normalize_job(job):
         **normalize_schedule(job.get("schedule")),
         "created_at": str(job.get("created_at", "")),
         "next_execution_at": "",
-        "time_zone": DISPLAY_TIME_ZONE,
+        "time_zone": time_zone,
         "state": str(last_run.get("state") or ""),
     }
 
@@ -177,7 +212,11 @@ def parse_api_datetime(value):
 
 
 def normalize_execution_state(execution):
-    state = str(execution.get("state") or execution.get("mistral_state") or "").strip().lower()
+    state = (
+        str(execution.get("state") or execution.get("mistral_state") or "")
+        .strip()
+        .lower()
+    )
     if state in {"failed", "error"}:
         return "failed"
     if state in {"succeeded", "success"}:
@@ -203,13 +242,17 @@ def normalize_execution(execution):
     started_at = parse_api_datetime(execution.get("started_at"))
     finished_at = parse_api_datetime(execution.get("finished_at"))
     duration_seconds = (
-        (finished_at - started_at).total_seconds() if started_at and finished_at else None
+        (finished_at - started_at).total_seconds()
+        if started_at and finished_at
+        else None
     )
     return {
         "id": execution.get("id"),
         "state": normalize_execution_state(execution),
         # Workflow executions report mistral_state_info; job runs report error.
-        "state_info": str(execution.get("mistral_state_info") or execution.get("error") or ""),
+        "state_info": str(
+            execution.get("mistral_state_info") or execution.get("error") or ""
+        ),
         "reference_at": execution_reference_time(execution),
         "started_at": str(execution.get("started_at", "") or ""),
         "finished_at": str(execution.get("finished_at", "") or ""),
@@ -221,8 +264,14 @@ def normalize_execution(execution):
 
 def workflow_occurrence_times(ws, range_start, range_end):
     """Scheduled run times for every date from range_start to range_end (inclusive)."""
-    days = [range_start + timedelta(days=i) for i in range((range_end - range_start).days + 1)]
+    days = [
+        range_start + timedelta(days=i)
+        for i in range((range_end - range_start).days + 1)
+    ]
     tzinfo = get_workflow_zoneinfo(ws)
+    if tzinfo is None:
+        # Unknown scheduling zone: omit projections rather than guess.
+        return []
     scheduled_days = set(ws.get("scheduled_days", []))
     days_of_month = ws.get("scheduled_days_of_month", [])
     occurrences = []
@@ -233,14 +282,18 @@ def workflow_occurrence_times(ws, range_start, range_end):
             if civis_weekday in scheduled_days:
                 for hour, minute in event_time_pairs(ws):
                     occurrences.append(
-                        datetime(day.year, day.month, day.day, hour, minute, tzinfo=tzinfo)
+                        datetime(
+                            day.year, day.month, day.day, hour, minute, tzinfo=tzinfo
+                        )
                     )
     elif days_of_month:
         for day in days:
             if day.day in days_of_month:
                 for hour, minute in event_time_pairs(ws):
                     occurrences.append(
-                        datetime(day.year, day.month, day.day, hour, minute, tzinfo=tzinfo)
+                        datetime(
+                            day.year, day.month, day.day, hour, minute, tzinfo=tzinfo
+                        )
                     )
 
     return sorted(occurrences)
@@ -297,7 +350,9 @@ def collect_runs_in_window(fetch_page, limit, window_start_utc, window_end_utc):
             normalized = normalize_execution(execution)
             reference_at = normalized["reference_at"]
             created_at = parse_api_datetime(normalized["created_at"])
-            if created_at is not None and (oldest_in_page is None or created_at < oldest_in_page):
+            if created_at is not None and (
+                oldest_in_page is None or created_at < oldest_in_page
+            ):
                 oldest_in_page = created_at
             if reference_at is None:
                 continue
@@ -329,7 +384,9 @@ def fetch_execution_tasks(client, workflow_id, execution_id):
                 "state": str(task.get("mistral_state") or ""),
                 "stateInfo": str(task.get("mistral_state_info") or ""),
                 "jobId": latest_run.get("job_id"),
-                "jobUrl": job_url(latest_run["job_id"]) if latest_run.get("job_id") else "",
+                "jobUrl": (
+                    job_url(latest_run["job_id"]) if latest_run.get("job_id") else ""
+                ),
                 "runId": latest_run.get("id"),
                 "runState": str(latest_run.get("state") or ""),
                 "durationSeconds": (
@@ -388,7 +445,7 @@ def item_event_metadata(item):
         "itemId": item["id"],
         "itemUrl": item_url(item),
         "scheduleText": schedule_to_string(item),
-        "timeZone": item.get("time_zone", "UTC"),
+        "timeZone": item.get("time_zone") or "Unknown",
         "createdAt": item.get("created_at", ""),
         "nextExecutionAt": item.get("next_execution_at", ""),
         # Everyday items are hidden from the month grid but shown in week/day views.
@@ -474,7 +531,9 @@ def build_everyday_cards(everyday_workflows, most_recent_states=None):
         created_at_html = html_lib.escape(str(ws.get("created_at", "")))
         most_recent_state = most_recent_states.get(ws["id"], "not run")
         state_color = execution_state_color(most_recent_state)
-        state_label_html = html_lib.escape(format_execution_state_label(most_recent_state))
+        state_label_html = html_lib.escape(
+            format_execution_state_label(most_recent_state)
+        )
         cards.append(
             f"<div class='workflow-card' data-wfname=\"{workflow_name_lower}\">"
             f"  <div><b>Name:</b> <a href='{workflow_link}' target='_blank' "
@@ -1226,7 +1285,11 @@ def build_client_script(calendar_time_zone=DISPLAY_TIME_ZONE):
 
 
 def build_html(
-    calendar_events, everyday_cards_html, everyday_job_cards_html, job_id, generated_at=""
+    calendar_events,
+    everyday_cards_html,
+    everyday_job_cards_html,
+    job_id,
+    generated_at="",
 ):
     events_json = json.dumps(calendar_events)
     # Prevent </script> from terminating the enclosing script tag.
@@ -1265,8 +1328,9 @@ def build_html(
     which task failed and why, with links back to platform. Items scheduled to run
     <em>every</em> day are left out of the month grid (they are listed below it) but
     appear in the week and day views.</p>
-    <p>Platform does not record a time zone for job schedules, so upcoming job runs are
-    projected in {html_lib.escape(DISPLAY_TIME_ZONE)}. Past runs are always accurate.</p>
+    <p>Times are displayed in {html_lib.escape(DISPLAY_TIME_ZONE)}. Upcoming runs are
+    projected in each item's own schedule time zone; jobs whose time zone platform does
+    not report are not projected. Past runs are always accurate.</p>
     <p><b>Refreshing this report:</b> navigate to
     <a href="https://platform.civisanalytics.com/spa/#/scripts/python3/{escaped_job_id}"
      target="_blank" rel="noopener noreferrer">this script</a>
@@ -1311,7 +1375,9 @@ def build_html(
 
 
 def is_everyday(item):
-    return item["scheduled"] and set(item["scheduled_days"]) == set(EVERYDAY_SCHEDULED_DAYS)
+    return item["scheduled"] and set(item["scheduled_days"]) == set(
+        EVERYDAY_SCHEDULED_DAYS
+    )
 
 
 def log_progress(label, index, total):
@@ -1329,7 +1395,11 @@ def main():
         for wf in fetch_all_workflows(client)
         if not wf.get("archived", False)
     ]
-    normalized_jobs = [normalize_job(job) for job in fetch_all_scheduled_jobs(client)]
+    scheduled_jobs = fetch_all_scheduled_jobs(client)
+    # API responses are read-only, so pass the time zone in rather than setting it on the job.
+    normalized_jobs = [
+        normalize_job(job, fetch_job_time_zone(client, job)) for job in scheduled_jobs
+    ]
 
     everyday_workflows = [ws for ws in normalized_workflows if is_everyday(ws)]
     everyday_jobs = [job for job in normalized_jobs if is_everyday(job)]
@@ -1352,7 +1422,9 @@ def main():
             if execution["state"] not in FAILURE_STATES:
                 continue
             try:
-                execution["tasks"] = fetch_execution_tasks(client, workflow["id"], execution["id"])
+                execution["tasks"] = fetch_execution_tasks(
+                    client, workflow["id"], execution["id"]
+                )
             except Exception as err:  # keep the report usable if one lookup fails
                 print(f"Could not load tasks for execution {execution['id']}: {err}")
         item_executions[("workflow", workflow["id"])] = executions
@@ -1368,7 +1440,9 @@ def main():
         log_progress("jobs", index, len(normalized_jobs))
 
     # Reuse state from the list calls for the "most recent run" on the everyday cards.
-    everyday_workflow_states = {ws["id"]: normalize_execution_state(ws) for ws in everyday_workflows}
+    everyday_workflow_states = {
+        ws["id"]: normalize_execution_state(ws) for ws in everyday_workflows
+    }
     everyday_job_states = {
         job["id"]: normalize_execution_state(job) if job["state"] else "not run"
         for job in everyday_jobs
