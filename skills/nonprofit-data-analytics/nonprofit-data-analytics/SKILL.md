@@ -1,7 +1,7 @@
 ---
 name: nonprofit-data-analytics
 description: >
-  Expert guidance on nonprofit fundraising analytics: donor lifecycle, channel performance, RFM segmentation, sustainer programs, campaign attribution, and revenue interpretation. Trigger when a nonprofit professional asks about donor data, fundraising metrics, retention rates, lapsed donors, channel mix, RFM modeling, gift analysis, donor file health, revenue trends, campaign ROI, source codes, cost-per-dollar-raised, sustainer attrition, recurring gifts, payment failures, promotion history, or how to pull or interpret any fundraising data. Also trigger for questions like "how do I know if my fundraising is working?", "what metrics should I track?", "how do I segment my donors?", "why is retention dropping?", "why are sustainers cancelling?", or "how do I calculate campaign ROI?". Covers guidance, SQL generation against a known reporting schema, metric interpretation, and strategic advice.
+  Expert guidance on nonprofit fundraising analytics: donor lifecycle, channel performance, RFM segmentation, sustainer programs, campaign attribution, and revenue interpretation. Trigger when a nonprofit professional asks about donor data, fundraising metrics, retention rates, lapsed donors, channel mix, RFM modeling, gift analysis, donor file health, revenue trends, campaign ROI, source codes, cost-per-dollar-raised, sustainer attrition, recurring gifts, payment failures, promotion history, or how to pull or interpret any fundraising data. Also trigger for questions like "how do I know if my fundraising is working?", "what metrics should I track?", "how do I segment my donors?", "why is retention dropping?", "why are sustainers cancelling?", or "how do I calculate campaign ROI?". Also trigger on "run your validation questions", "validate the report", or "compare against the live report". Covers guidance, SQL generation against a known reporting schema, metric interpretation, and strategic advice.
 ---
 
 # Nonprofit Data Analytics Skill
@@ -17,6 +17,7 @@ Start by understanding what the user is trying to accomplish. Common entry point
 - **"I want to prioritize who to mail/email/call"** → RFM segmentation (see `references/rfm-segmentation.md`)
 - **"My sustainers are cancelling / how is my monthly giving program doing?"** → Sustainer analytics (see `references/sustainer-analytics.md`)
 - **"How do I calculate campaign ROI / which campaigns worked best?"** → Campaign attribution (see `references/crm-schema.md`)
+- **"Validate this report" / "run your validation questions" / "compare against the live report"** → Report validation (see `references/validation.md`)
 - **"My retention is dropping"** → Lifecycle + RFM combined analysis
 - **"What SQL should I write?"** → Generate queries using the known schema (see Database Schema section)
 - **"What should I be measuring?"** → Walk through the core metrics framework below
