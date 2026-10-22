@@ -1395,7 +1395,13 @@ def main():
         for wf in fetch_all_workflows(client)
         if not wf.get("archived", False)
     ]
-    scheduled_jobs = fetch_all_scheduled_jobs(client)
+    # This script is itself a scheduled job; leave it out of its own report.
+    own_job_id = os.environ.get("CIVIS_JOB_ID", "")
+    scheduled_jobs = [
+        job
+        for job in fetch_all_scheduled_jobs(client)
+        if str(job["id"]) != own_job_id
+    ]
     # API responses are read-only, so pass the time zone in rather than setting it on the job.
     normalized_jobs = [
         normalize_job(job, fetch_job_time_zone(client, job)) for job in scheduled_jobs
