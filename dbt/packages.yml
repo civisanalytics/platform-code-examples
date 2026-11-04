@@ -1,0 +1,5 @@
+packages:
+  - package: dbt-labs/dbt_utils
+    version: 1.4.1
+  - git: "https://github.com/dbt-labs/dbt-audit-helper.git"
+    revision: main
