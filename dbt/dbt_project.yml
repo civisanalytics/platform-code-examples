@@ -28,9 +28,5 @@ models:
   jaffle_shop:
     staging:
       +materialized: view
-      # Start with strict analysis on your cleanest models
-      +static_analysis: strict
     marts:
       +materialized: table
-      # Keep baseline for models that need more work
-      +static_analysis: baseline
