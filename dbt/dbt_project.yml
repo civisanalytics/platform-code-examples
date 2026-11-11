@@ -2,7 +2,7 @@ config-version: 2
 
 name: "jaffle_shop"
 version: "3.0.0"
-require-dbt-version: ">=2.0.0"
+require-dbt-version: ">=1.5.0"
 
 profile: civis-studio # Put your profile here
 
@@ -17,6 +17,9 @@ target-path: "target"
 clean-targets:
   - "target"
   - "dbt_packages"
+
+vars:
+  "dbt_date:time_zone": "America/New_York"
 
 seeds:
   jaffle_shop:
